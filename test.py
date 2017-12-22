@@ -15,7 +15,7 @@ for l in f:
 f.close()
 print len(fileList)
 
-fileList = fileList[:10]
+fileList = fileList[:5]
 
 print fileList
 
@@ -34,7 +34,7 @@ rootreader_op = [
             "jet_eta",
             "genLL_decayLength"
         ])
-    ] for _ in range(4)
+    ] for _ in range(2)
 ]
 
 batchSize = 1000
@@ -64,7 +64,7 @@ for _ in range(100000):
 '''
 try:
     while(True):
-        pass
+        
         sess.run(trainingBatch)
         #print sess.run(dequeue_op)
 except tf.errors.OutOfRangeError:

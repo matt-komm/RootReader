@@ -91,7 +91,12 @@ class RootReaderOp:
             {
                 QueueInterface* queue;
                 OP_REQUIRES_OK(context,GetResourceFromContext(context, "queue_handle", &queue));
+                
                 string fileName = GetNextFilename(queue,context);
+                if (!context->status().ok())
+                {
+                    return; //status is bad when queue is closed so no more files -> training has finished
+                }
                 if (fileName.size()==0) throw std::runtime_error("Got empty filename");
                    
                 //creating TFile/setting branch adresses is not thread safe
@@ -139,6 +144,8 @@ class RootReaderOp:
         
         string GetNextFilename(QueueInterface* queue, OpKernelContext* context) const 
         {
+            //mutex_lock localLock(localMutex_); //mutex here makes deadlock for some reason
+            //TODO: check core/framework/reader_base.cc for details
             string work;
             //if (queue->is_closed()) throw std::runtime_error("Closed queue");
             Notification n;
