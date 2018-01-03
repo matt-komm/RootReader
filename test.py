@@ -32,15 +32,15 @@ for epoch in range(1):
     rootreader_op = [
         [
             rootreader_module.root_reader(fileListQueue.queue_ref, naninf=0, branches=[
-                "jet_pt",
-                "jet_eta",
-                #"sv_pt",
-                "genLL_decayLength"
+                #"jet_pt",
+                #"jet_eta",
+                "sv_pt[n_sv,5]",
+                #"genLL_decayLength"
             ])
         ] for _ in range(1)
     ]
 
-    batchSize = 10
+    batchSize = 1
     minAfterDequeue = batchSize*2
     capacity = minAfterDequeue + 3 * batchSize
 

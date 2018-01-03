@@ -31,7 +31,8 @@ REGISTER_OP("RootReader")
     {
         std::vector<string> branchNames;
         TF_RETURN_IF_ERROR(c->GetAttr("branches",&branchNames));
-        shape_inference::ShapeHandle s = c->MakeShape({c->MakeDim(branchNames.size())});
+        //shape_inference::ShapeHandle s = c->MakeShape({c->MakeDim(branchNames.size())});
+        shape_inference::ShapeHandle s = c->MakeShape({c->MakeDim(5)});
         c->set_output(0, s);
         return Status::OK();
     })
@@ -81,7 +82,7 @@ class RootReaderOp:
                 }
                 
                 virtual void setBranchAddress(TTree* tree) = 0;
-                virtual int fillTensor(typename TTypes<T>::Flat& flatTensor, int index, const T& reset) const = 0;
+                virtual unsigned int fillTensor(typename TTypes<T>::Flat& flatTensor, unsigned int index, const T& reset) const = 0;
         };
         
         template<typename T>
@@ -105,7 +106,7 @@ class RootReaderOp:
                 {
                     tree->SetBranchAddress(Branch<T>::name().c_str(),&value_);
                 }
-                virtual int fillTensor(typename TTypes<T>::Flat& flatTensor, int index, const T& reset) const
+                virtual unsigned int fillTensor(typename TTypes<T>::Flat& flatTensor,unsigned int index, const T& reset) const
                 {
                     flatTensor(index)=Branch<T>::resetNanOrInf(value_,reset);
                     return index+1;
@@ -118,11 +119,11 @@ class RootReaderOp:
         {
             private:
                 T* values_;
-                int size_;
-                std::shared_ptr<SingleBranch<int>> length_;
+                unsigned int size_;
+                std::shared_ptr<SingleBranch<unsigned int>> length_;
                  
             public:
-                ArrayBranch(const string& name, std::shared_ptr<SingleBranch<int>>& length, int size):
+                ArrayBranch(const string& name, std::shared_ptr<SingleBranch<unsigned int>>& length, unsigned int size):
                     Branch<T>(name),
                     values_(new T(size)),
                     length_(length),
@@ -146,18 +147,22 @@ class RootReaderOp:
                 
                 virtual void setBranchAddress(TTree* tree)
                 {
-                    tree->SetBranchAddress(Branch<T>::name().c_str(),&values_);
+                    tree->SetBranchAddress(Branch<T>::name().c_str(),values_);
                 }
-                virtual int fillTensor(typename TTypes<T>::Flat& flatTensor, int index, const T& reset) const
+                virtual unsigned int fillTensor(typename TTypes<T>::Flat& flatTensor, unsigned int index, const T& reset) const
                 {
+                    std::cout<<"length="<<length_->value()<<std::endl;
                     for (unsigned int i = 0; i < std::min(length_->value(),size_); ++i)
                     {
+                        std::cout<<i<<": "<<values_[i]<<std::endl;
                         flatTensor(index+i)=Branch<T>::resetNanOrInf(values_[i],reset);
                     }
+                    
                     for (unsigned int i = std::min(length_->value(),size_); i < size_; ++i)
                     {
-                        flatTensor(index+i) = 0; //is explicit zero padding required?
+                        flatTensor(index+i) = 0; //zero padding
                     }
+                    
                     return index+size_;
                 }
         };
@@ -168,7 +173,7 @@ class RootReaderOp:
         std::unique_ptr<TFile> inputFile_;
         TTree* tree_;
         std::vector<std::shared_ptr<Branch<float>>> branches_;
-        std::unordered_map<string,std::shared_ptr<SingleBranch<int>>> arrayLengths_;
+        std::unordered_map<string,std::shared_ptr<SingleBranch<unsigned int>>> arrayLengths_;
         size_t currentEntry_;
         
         int naninf_;
@@ -210,11 +215,12 @@ class RootReaderOp:
                     auto p3 = std::find(p2,name.end(),']');
                     std::string branchName(name.begin(),p1);
                     std::string lengthName(p1+1,p2);
-                    int size = std::stoi(std::string(p2+1,p3));
+                    unsigned int size = std::stol(std::string(p2+1,p3));
                     auto lengthBranchIt = arrayLengths_.find(lengthName);
+                    std::cout<<"branch="<<branchName<<", length="<<lengthName<<", size="<<size<<std::endl;
                     if (lengthBranchIt==arrayLengths_.end())
                     {
-                        arrayLengths_[lengthName]=std::make_shared<SingleBranch<int>>(lengthName);
+                        arrayLengths_[lengthName]=std::make_shared<SingleBranch<unsigned int>>(lengthName);
                     }
                     branches_.emplace_back(
                         std::make_shared<ArrayBranch<float>>(branchName,arrayLengths_[lengthName],size)
@@ -260,6 +266,10 @@ class RootReaderOp:
                 {
                     branch->setBranchAddress(tree_);
                 }
+                for (auto& branchPair: arrayLengths_)
+                {
+                    branchPair.second->setBranchAddress(tree_);
+                }
                 
             }
             tree_->GetEntry(currentEntry_);
@@ -267,7 +277,8 @@ class RootReaderOp:
 
             Tensor* output_tensor = nullptr;
             TensorShape shape;
-            shape.AddDim(branches_.size());
+            //shape.AddDim(branches_.size());
+            shape.AddDim(5);
             OP_REQUIRES_OK(context, context->allocate_output("out", shape,&output_tensor));
             
             auto output_flat = output_tensor->flat<float>();
@@ -279,7 +290,7 @@ class RootReaderOp:
                 output_flat(i) = resetNanOrInf(varPair.second,naninf_);
             }
             */
-            int index = 0;
+            unsigned int index = 0;
             for (auto& branch: branches_)
             {
                 index = branch->fillTensor(output_flat,index,naninf_);
