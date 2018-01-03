@@ -25,6 +25,7 @@ REGISTER_OP("RootReader")
     //.Input("queue_handle: Ref(string)")
     .Output("out: float32")
     .Attr("branches: list(string)")
+    .Attr("naninf: int = 0")
     .SetIsStateful()
     .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) 
     {
@@ -44,35 +45,161 @@ REGISTER_OP("RootReader")
 #include "TTree.h"
 
 #include <vector>
+#include <regex>
+#include <memory>
 #include <chrono>
 #include <thread>
 
 class RootReaderOp:
     public OpKernel
 {
+
+    public:
+        template<typename T>
+        class Branch
+        {
+            protected:
+                string name_;
+            public:
+                Branch(const string& name):
+                    name_(name)
+                {
+                }
+                
+                inline const string name() const
+                {
+                    return name_;
+                }
+                
+                static T resetNanOrInf(const T& v, const T& reset)
+                {
+                    if (std::isnan(v) or std::isinf(v))
+                    {
+                        return reset;
+                    }
+                    return v;
+                }
+                
+                virtual void setBranchAddress(TTree* tree) = 0;
+                virtual int fillTensor(typename TTypes<T>::Flat& flatTensor, int index, const T& reset) const = 0;
+        };
+        
+        template<typename T>
+        class SingleBranch:
+            public Branch<T>
+        {
+            private:
+                T value_;
+            public:
+                SingleBranch(const string& name):
+                    Branch<T>(name)
+                {
+                }
+                
+                inline const T& value() const
+                {
+                    return value_;
+                }
+                
+                virtual void setBranchAddress(TTree* tree)
+                {
+                    tree->SetBranchAddress(Branch<T>::name().c_str(),&value_);
+                }
+                virtual int fillTensor(typename TTypes<T>::Flat& flatTensor, int index, const T& reset) const
+                {
+                    flatTensor(index)=Branch<T>::resetNanOrInf(value_,reset);
+                    return index+1;
+                }
+        }; 
+        
+        template<typename T>
+        class ArrayBranch:
+            public Branch<T>
+        {
+            private:
+                T* values_;
+                int size_;
+                std::shared_ptr<SingleBranch<int>> length_;
+                 
+            public:
+                ArrayBranch(const string& name, std::shared_ptr<SingleBranch<int>> length, int size):
+                    Branch<T>(name),
+                    values_(new T(size)),
+                    length_(length),
+                    size_(size)
+                {
+                }
+                
+                inline const T& value(unsigned int index) const
+                {
+                    if (index>=size_)
+                    {
+                        throw std::runtime_error("Array index out-of-range");
+                    }
+                    return values_[index];
+                }
+                
+                virtual ~ArrayBranch()
+                {
+                    delete[] values_;
+                }
+                
+                virtual void setBranchAddress(TTree* tree)
+                {
+                    tree->SetBranchAddress(Branch<T>::name().c_str(),&values_);
+                }
+                virtual int fillTensor(typename TTypes<T>::Flat& flatTensor, int index, const T& reset) const
+                {
+                    for (unsigned int i = 0; i < std::min(length_->value(),size_); ++i)
+                    {
+                        flatTensor(index+i)=Branch<T>::resetNanOrInf(values_[i],reset);
+                    }
+                    return index+size_;
+                }
+        };
+        
     private:
         static mutex globalMutexForROOT_; //protects ROOT
         
         mutable mutex localMutex_; //protects class members
         std::unique_ptr<TFile> inputFile_;
         TTree* tree_;
-        std::vector<std::pair<string,float>> _branches;
+        std::vector<std::shared_ptr<Branch<float>>> branches_;
         size_t currentEntry_;
+        
+        int naninf_;
         
     public:
         explicit RootReaderOp(OpKernelConstruction* context): 
             OpKernel(context),
             inputFile_(nullptr),
-            currentEntry_(0)
+            currentEntry_(0),
+            naninf_(0)
         {
             std::vector<string> branchNames;
             OP_REQUIRES_OK(
                 context,
                 context->GetAttr("branches",&branchNames)
             );
+            OP_REQUIRES_OK(
+                context,
+                context->GetAttr("naninf",&naninf_)
+            );
+            /*
+            static std::regex syntaxRegex("[A-Za-z_\\-0-9]+\\[[0-9]+\\]");
+                    if (not std::regex_match(cfg.begin(),cfg.end(),syntaxRegex))
+                    {
+                        throw std::runtime_error("Malformed configuration: "+cfg);
+                    }
+                    auto p1 = std::find(cfg.begin(),cfg.end(),'[');
+                    auto p2 = std::find(cfg.begin(),cfg.end(),']');
+                    std::string name(cfg.begin(),p1);
+                    int size = std::stoi(std::string(p1+1,p2));
+                    return ArrayEntry(name,size);
+            */
             for (auto& name: branchNames)
             {
-                _branches.emplace_back(name,0);
+                branches_.emplace_back(std::make_shared<SingleBranch<float>>(name));
             }
         }
         
@@ -80,13 +207,13 @@ class RootReaderOp:
         {
             std::cout<<"final read: "<<currentEntry_<<std::endl;
         }
+        
+        
 
         void Compute(OpKernelContext* context)//, DoneCallback done) override
         {
             mutex_lock localLock(localMutex_);
-            
-            
-            
+           
             if (not inputFile_)
             {
                 QueueInterface* queue;
@@ -95,7 +222,7 @@ class RootReaderOp:
                 string fileName = GetNextFilename(queue,context);
                 if (!context->status().ok())
                 {
-                    return; //status is bad when queue is closed so no more files -> training has finished
+                    return; //status is bad when queue is closed, so no more files -> training has finished
                 }
                 if (fileName.size()==0) throw std::runtime_error("Got empty filename");
                    
@@ -109,9 +236,9 @@ class RootReaderOp:
                 {
                     throw std::runtime_error("Cannot get tree 'deepntuplizer/tree' from file "+fileName);
                 }
-                for (auto& varPair: _branches)
+                for (auto& branch: branches_)
                 {
-                    tree_->SetBranchAddress(varPair.first.c_str(),&varPair.second);
+                    branch->setBranchAddress(tree_);
                 }
                 
             }
@@ -120,17 +247,22 @@ class RootReaderOp:
 
             Tensor* output_tensor = nullptr;
             TensorShape shape;
-            shape.AddDim(_branches.size());
+            shape.AddDim(branches_.size());
             OP_REQUIRES_OK(context, context->allocate_output("out", shape,&output_tensor));
             
-            //not really needed?
             auto output_flat = output_tensor->flat<float>();
-
+            /*
             for (unsigned int i = 0; i < _branches.size(); ++i)
             {
                 auto& varPair = _branches.at(i);
                 //std::cout<<"  "<<varPair.first<<": "<<varPair.second<<std::endl;
-                output_flat(i) = varPair.second;
+                output_flat(i) = resetNanOrInf(varPair.second,naninf_);
+            }
+            */
+            int index = 0;
+            for (auto& branch: branches_)
+            {
+                index = branch->fillTensor(output_flat,index,naninf_);
             }
             
             ++currentEntry_;
