@@ -122,7 +122,7 @@ class RootReaderOp:
                 std::shared_ptr<SingleBranch<int>> length_;
                  
             public:
-                ArrayBranch(const string& name, std::shared_ptr<SingleBranch<int>> length, int size):
+                ArrayBranch(const string& name, std::shared_ptr<SingleBranch<int>>& length, int size):
                     Branch<T>(name),
                     values_(new T(size)),
                     length_(length),
@@ -154,18 +154,21 @@ class RootReaderOp:
                     {
                         flatTensor(index+i)=Branch<T>::resetNanOrInf(values_[i],reset);
                     }
+                    for (unsigned int i = std::min(length_->value(),size_); i < size_; ++i)
+                    {
+                        flatTensor(index+i) = 0; //is explicit zero padding required?
+                    }
                     return index+size_;
                 }
         };
         
     private:
         static mutex globalMutexForROOT_; //protects ROOT
-        
-        mutable mutex localMutex_; //protects class members
+        mutex localMutex_; //protects class members
         std::unique_ptr<TFile> inputFile_;
         TTree* tree_;
         std::vector<std::shared_ptr<Branch<float>>> branches_;
-        std::vector<std::shared_ptr<SingleBranch<int>>> arrayLengths_;
+        std::unordered_map<string,std::shared_ptr<SingleBranch<int>>> arrayLengths_;
         size_t currentEntry_;
         
         int naninf_;
@@ -186,21 +189,37 @@ class RootReaderOp:
                 context,
                 context->GetAttr("naninf",&naninf_)
             );
+            
+            
             /*
-            static std::regex syntaxRegex("[A-Za-z_\\-0-9]+\\[[0-9]+\\]");
-                    if (not std::regex_match(cfg.begin(),cfg.end(),syntaxRegex))
-                    {
-                        throw std::runtime_error("Malformed configuration: "+cfg);
-                    }
-                    auto p1 = std::find(cfg.begin(),cfg.end(),'[');
-                    auto p2 = std::find(cfg.begin(),cfg.end(),']');
-                    std::string name(cfg.begin(),p1);
-                    int size = std::stoi(std::string(p1+1,p2));
-                    return ArrayEntry(name,size);
+            
             */
             for (auto& name: branchNames)
             {
-                branches_.emplace_back(std::make_shared<SingleBranch<float>>(name));
+                static std::regex syntaxRegex("[A-Za-z_0-9]+\\[[A-Za-z_0-9]+,[0-9]+\\]");
+                
+                
+                if (not std::regex_match(name.begin(),name.end(),syntaxRegex))
+                {
+                    branches_.emplace_back(std::make_shared<SingleBranch<float>>(name));
+                }
+                else
+                {
+                    auto p1 = std::find(name.begin(),name.end(),'[');
+                    auto p2 = std::find(p1,name.end(),',');
+                    auto p3 = std::find(p2,name.end(),']');
+                    std::string branchName(name.begin(),p1);
+                    std::string lengthName(p1+1,p2);
+                    int size = std::stoi(std::string(p2+1,p3));
+                    auto lengthBranchIt = arrayLengths_.find(lengthName);
+                    if (lengthBranchIt==arrayLengths_.end())
+                    {
+                        arrayLengths_[lengthName]=std::make_shared<SingleBranch<int>>(lengthName);
+                    }
+                    branches_.emplace_back(
+                        std::make_shared<ArrayBranch<float>>(branchName,arrayLengths_[lengthName],size)
+                    );
+                }
             }
         }
         
