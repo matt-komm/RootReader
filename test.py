@@ -32,9 +32,10 @@ for epoch in range(1):
     rootreader_op = [
         [
             rootreader_module.root_reader(fileListQueue.queue_ref, naninf=0, branches=[
-                #"jet_pt",
-                #"jet_eta",
-                "sv_pt[n_sv,5]",
+                "jet_pt",
+                "jet_eta",
+                "sv_pt[n_sv,2]",
+                "sv_eta[n_sv,2]",
                 #"genLL_decayLength"
             ])
         ] for _ in range(1)

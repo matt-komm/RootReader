@@ -1,6 +1,8 @@
 #include "tensorflow/core/framework/reader_base.h"
 #include "tensorflow/core/framework/op.h"
 
+#include <regex>
+
 using namespace tensorflow;
 
 /*
@@ -20,6 +22,8 @@ class TTreeResource:
 };
 */
 
+
+
 REGISTER_OP("RootReader")
     .Input("queue_handle: resource")
     //.Input("queue_handle: Ref(string)")
@@ -31,8 +35,25 @@ REGISTER_OP("RootReader")
     {
         std::vector<string> branchNames;
         TF_RETURN_IF_ERROR(c->GetAttr("branches",&branchNames));
+        unsigned int size = 0;
+        for (auto name: branchNames)
+        {
+            static std::regex syntaxRegex("[A-Za-z_0-9]+\\[[A-Za-z_0-9]+,[0-9]+\\]");
+            if (not std::regex_match(name.begin(),name.end(),syntaxRegex))
+            {
+                size+=1;
+            }
+            else
+            {
+                auto p1 = std::find(name.begin(),name.end(),'[');
+                auto p2 = std::find(p1,name.end(),',');
+                auto p3 = std::find(p2,name.end(),']');
+                
+                size += std::stol(std::string(p2+1,p3));
+            }
+        }
         //shape_inference::ShapeHandle s = c->MakeShape({c->MakeDim(branchNames.size())});
-        shape_inference::ShapeHandle s = c->MakeShape({c->MakeDim(5)});
+        shape_inference::ShapeHandle s = c->MakeShape({c->MakeDim(size)});
         c->set_output(0, s);
         return Status::OK();
     })
@@ -46,8 +67,8 @@ REGISTER_OP("RootReader")
 #include "TTree.h"
 
 #include <vector>
-#include <regex>
 #include <memory>
+
 #include <chrono>
 #include <thread>
 
@@ -151,13 +172,12 @@ class RootReaderOp:
                 }
                 virtual unsigned int fillTensor(typename TTypes<T>::Flat& flatTensor, unsigned int index, const T& reset) const
                 {
-                    std::cout<<"length="<<length_->value()<<std::endl;
+                    //std::cout<<"length="<<length_->value()<<std::endl;
                     for (unsigned int i = 0; i < std::min(length_->value(),size_); ++i)
                     {
-                        std::cout<<i<<": "<<values_[i]<<std::endl;
+                        //std::cout<<i<<": "<<values_[i]<<std::endl;
                         flatTensor(index+i)=Branch<T>::resetNanOrInf(values_[i],reset);
                     }
-                    
                     for (unsigned int i = std::min(length_->value(),size_); i < size_; ++i)
                     {
                         flatTensor(index+i) = 0; //zero padding
@@ -178,12 +198,15 @@ class RootReaderOp:
         
         int naninf_;
         
+        unsigned int size_;
+        
     public:
         explicit RootReaderOp(OpKernelConstruction* context): 
             OpKernel(context),
             inputFile_(nullptr),
             currentEntry_(0),
-            naninf_(0)
+            naninf_(0),
+            size_(0)
         {
             std::vector<string> branchNames;
             OP_REQUIRES_OK(
@@ -195,18 +218,13 @@ class RootReaderOp:
                 context->GetAttr("naninf",&naninf_)
             );
             
-            
-            /*
-            
-            */
             for (auto& name: branchNames)
             {
                 static std::regex syntaxRegex("[A-Za-z_0-9]+\\[[A-Za-z_0-9]+,[0-9]+\\]");
-                
-                
                 if (not std::regex_match(name.begin(),name.end(),syntaxRegex))
                 {
                     branches_.emplace_back(std::make_shared<SingleBranch<float>>(name));
+                    size_+=1;
                 }
                 else
                 {
@@ -216,8 +234,9 @@ class RootReaderOp:
                     std::string branchName(name.begin(),p1);
                     std::string lengthName(p1+1,p2);
                     unsigned int size = std::stol(std::string(p2+1,p3));
+                    size_+=size;
                     auto lengthBranchIt = arrayLengths_.find(lengthName);
-                    std::cout<<"branch="<<branchName<<", length="<<lengthName<<", size="<<size<<std::endl;
+                    //std::cout<<"branch="<<branchName<<", length="<<lengthName<<", size="<<size<<std::endl;
                     if (lengthBranchIt==arrayLengths_.end())
                     {
                         arrayLengths_[lengthName]=std::make_shared<SingleBranch<unsigned int>>(lengthName);
@@ -278,7 +297,7 @@ class RootReaderOp:
             Tensor* output_tensor = nullptr;
             TensorShape shape;
             //shape.AddDim(branches_.size());
-            shape.AddDim(5);
+            shape.AddDim(size_);
             OP_REQUIRES_OK(context, context->allocate_output("out", shape,&output_tensor));
             
             auto output_flat = output_tensor->flat<float>();
