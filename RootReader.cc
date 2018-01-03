@@ -165,6 +165,7 @@ class RootReaderOp:
         std::unique_ptr<TFile> inputFile_;
         TTree* tree_;
         std::vector<std::shared_ptr<Branch<float>>> branches_;
+        std::vector<std::shared_ptr<SingleBranch<int>>> arrayLengths_;
         size_t currentEntry_;
         
         int naninf_;
