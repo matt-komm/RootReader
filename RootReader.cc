@@ -11,6 +11,7 @@ REGISTER_OP("RootReader")
     .Output("out: float32")
     .Attr("branches: list(string)")
     .Attr("naninf: int = 0")
+    .Attr("batch: int = 1")
     .SetIsStateful()
     .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) 
     {
@@ -34,7 +35,7 @@ REGISTER_OP("RootReader")
             }
         }
         //shape_inference::ShapeHandle s = c->MakeShape({c->MakeDim(branchNames.size())});
-        shape_inference::ShapeHandle s = c->MakeShape({c->MakeDim(size)});
+        shape_inference::ShapeHandle s = c->MakeShape({-1,c->MakeDim(size)});
         c->set_output(0, s);
         return Status::OK();
     })
@@ -106,11 +107,15 @@ class RootReaderOp:
                 
                 virtual void setBranchAddress(TTree* tree)
                 {
-                    tree->SetBranchAddress(Branch<OUT>::name().c_str(),&value_);
+                    if(tree->SetBranchAddress(Branch<OUT>::name().c_str(),&value_)<0)
+                    {
+                        throw std::runtime_error("No branch with name '"+Branch<OUT>::name()+"' in tree");
+                    }
                 }
                 virtual unsigned int fillTensor(typename TTypes<OUT>::Flat& flatTensor,unsigned int index, const OUT& reset) const
                 {
                     flatTensor(index)=Branch<OUT>::resetNanOrInf(value_,reset);
+                    //std::cout<<index<<": "<<Branch<OUT>::name()<<"="<<flatTensor(index)<<std::endl;
                     return index+1;
                 }
         }; 
@@ -120,14 +125,13 @@ class RootReaderOp:
             public Branch<OUT>
         {
             private:
-                IN* values_;
+                alignas(16) IN values_[50]; //there is some odd bug when using dynamic allocated arrays and root
                 unsigned int size_;
                 std::shared_ptr<SingleBranch<unsigned int,OUT>> length_;
                  
             public:
                 ArrayBranch(const string& name, std::shared_ptr<SingleBranch<unsigned int,OUT>>& length, unsigned int size):
                     Branch<OUT>(name),
-                    values_(new IN(size)),
                     length_(length),
                     size_(size)
                 {
@@ -144,23 +148,28 @@ class RootReaderOp:
                 
                 virtual ~ArrayBranch()
                 {
-                    delete[] values_;
+                    //delete[] values_;
                 }
                 
+                //error codes: https://root.cern.ch/doc/master/classTTree.html#a1a48bf75621868a514741b27252cad96
                 virtual void setBranchAddress(TTree* tree)
                 {
-                    tree->SetBranchAddress(Branch<OUT>::name().c_str(),values_);
+                    if(tree->SetBranchAddress(Branch<OUT>::name().c_str(),values_)<0)
+                    {
+                        throw std::runtime_error("No branch with name '"+Branch<OUT>::name()+"' in tree");
+                    }
                 }
                 virtual unsigned int fillTensor(typename TTypes<OUT>::Flat& flatTensor, unsigned int index, const OUT& reset) const
                 {
-                    std::cout<<Branch<OUT>::name()<<", length="<<length_->value()<<std::endl;
+                    //std::cout<<Branch<OUT>::name()<<", length="<<length_->value()<<std::endl;
                     for (unsigned int i = 0; i < std::min(length_->value(),size_); ++i)
                     {
-                        std::cout<<i<<": "<<values_[i]<<std::endl;
+                        //std::cout<<(index+i)<<": "<<values_[i]<<std::endl;
                         flatTensor(index+i)=Branch<OUT>::resetNanOrInf(values_[i],reset);
                     }
                     for (unsigned int i = std::min(length_->value(),size_); i < size_; ++i)
                     {
+                        //std::cout<<(index+i)<<": padded"<<std::endl;
                         flatTensor(index+i) = 0; //zero padding
                     }
                     
@@ -180,6 +189,7 @@ class RootReaderOp:
         int naninf_;
         
         unsigned int size_;
+        int nBatch_;
         
     public:
         explicit RootReaderOp(OpKernelConstruction* context): 
@@ -187,7 +197,8 @@ class RootReaderOp:
             inputFile_(nullptr),
             currentEntry_(0),
             naninf_(0),
-            size_(0)
+            size_(0),
+            nBatch_(1)
         {
             std::vector<string> branchNames;
             OP_REQUIRES_OK(
@@ -198,7 +209,10 @@ class RootReaderOp:
                 context,
                 context->GetAttr("naninf",&naninf_)
             );
-            
+            OP_REQUIRES_OK(
+                context,
+                context->GetAttr("batch",&nBatch_)
+            );
             for (auto& name: branchNames)
             {
                 static std::regex arraySyntaxRegex("[A-Za-z_0-9]+\\[[A-Za-z_0-9]+,[0-9]+\\]");
@@ -245,6 +259,8 @@ class RootReaderOp:
         virtual ~RootReaderOp()
         {
             std::cout<<"final read: "<<currentEntry_<<std::endl;
+            branches_.clear();
+            arrayLengths_.clear();
         }
         
         
@@ -261,7 +277,7 @@ class RootReaderOp:
                 string fileName = GetNextFilename(queue,context);
                 if (!context->status().ok())
                 {
-                    return; //status is bad when queue is closed, so no more files -> training has finished
+                    return; //status is bad when queue is closed, so no more reduce_files -> training has finished
                 }
                 if (fileName.size()==0) throw std::runtime_error("Got empty filename");
                    
@@ -287,32 +303,27 @@ class RootReaderOp:
                 }
                 
             }
-            tree_->GetEntry(currentEntry_);
-            //std::cout<<"entry: "<<currentEntry_<<std::endl;
-
             Tensor* output_tensor = nullptr;
             TensorShape shape;
-            //shape.AddDim(branches_.size());
+            unsigned int nBatches = std::min<unsigned int>(tree_->GetEntries()-currentEntry_,nBatch_);
+            shape.AddDim(nBatches);
             shape.AddDim(size_);
             OP_REQUIRES_OK(context, context->allocate_output("out", shape,&output_tensor));
             
             auto output_flat = output_tensor->flat<float>();
-            /*
-            for (unsigned int i = 0; i < _branches.size(); ++i)
-            {
-                auto& varPair = _branches.at(i);
-                //std::cout<<"  "<<varPair.first<<": "<<varPair.second<<std::endl;
-                output_flat(i) = resetNanOrInf(varPair.second,naninf_);
-            }
-            */
             unsigned int index = 0;
-            for (auto& branch: branches_)
+            //std::cout<<"prepare batch ..."<<std::endl;
+            for (unsigned int ibatch=0; ibatch<nBatches;++ibatch)
             {
-                index = branch->fillTensor(output_flat,index,naninf_);
+                //std::cout<<currentEntry_<<",";
+                tree_->GetEntry(currentEntry_);
+                for (auto& branch: branches_)
+                {
+                    index = branch->fillTensor(output_flat,index,naninf_);
+                }
+                ++currentEntry_;
             }
-            
-            ++currentEntry_;
-            
+            //std::cout<<std::endl;
             if (currentEntry_>=tree_->GetEntries())
             {
                 inputFile_->Close();

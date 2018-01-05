@@ -1,5 +1,6 @@
 import tensorflow as tf
 import os
+import time
 from root_reader import root_reader
 
 fileList = []
@@ -14,9 +15,13 @@ for l in f:
 f.close()
 print len(fileList)
 
-fileList = fileList[:5]
+fileList = fileList[:20]
 
 print fileList
+
+'''
+
+'''
 
 featureDict = {
     "truth": {
@@ -48,6 +53,7 @@ featureDict = {
         ],
         "multiplicity":None
     },
+    
     "globals": {
         "branches": [
             'jet_pt',
@@ -68,6 +74,25 @@ featureDict = {
         ],
         "multiplicity":None
     },
+     "sv" : {
+        "branches":[
+            'sv_pt',
+            'sv_deltaR',
+            'sv_mass',
+            'sv_ntracks',
+            'sv_chi2',
+            'sv_normchi2',
+            'sv_dxy',
+            'sv_dxysig',
+            'sv_d3d',
+            'sv_d3dsig',
+            'sv_costhetasvpv',
+            'sv_enratio',
+            
+        ],
+        "multiplicity":"n_sv",
+        "max":4
+    },
     "Cpfcan": {
         "branches": [
             'Cpfcan_BtagPf_trackEtaRel',
@@ -80,45 +105,60 @@ featureDict = {
             'Cpfcan_BtagPf_trackSip3dVal',
             'Cpfcan_BtagPf_trackSip3dSig',
             'Cpfcan_BtagPf_trackJetDistVal',
-            #'Cpfcan_BtagPf_trackJetDistSig',
 
             'Cpfcan_ptrel', 
             'Cpfcan_drminsv',
-            #'Cpfcan_fromPV',
             'Cpfcan_VTX_ass',
             'Cpfcan_puppiw',
             'Cpfcan_chi2',
             'Cpfcan_quality'
         ],
         "multiplicity":"n_Cpfcand",
-        "max":2
+        "max":25
+    },
+    "Npfcan": {
+        "branches": [
+            'Npfcan_ptrel',
+            'Npfcan_deltaR',
+            'Npfcan_isGamma',
+            'Npfcan_HadFrac',
+            'Npfcan_drminsv',
+            'Npfcan_puppiw'
+        ],
+        "multiplicity":"n_Npfcand",
+        "max":25
     }
 }
 
+  
+ 
 
 for epoch in range(1):
     print "epoch",epoch+1
-    fileListQueue = tf.train.string_input_producer(fileList, num_epochs=2, shuffle=True)
+    fileListQueue = tf.train.string_input_producer(fileList, num_epochs=1, shuffle=False)
 
     init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 
     rootreader_op = [
-        root_reader(fileListQueue, featureDict).batch() for _ in range(1)
+        root_reader(fileListQueue, featureDict,batch=100).raw() for _ in range(4)
     ]
-
-    batchSize = 1
+    print rootreader_op
+    
+    batchSize = 10000
     minAfterDequeue = batchSize*2
     capacity = minAfterDequeue + 3 * batchSize
 
-    #trainingBatch = tf.train.batch_join(
-    trainingBatch = tf.train.shuffle_batch_join(
+    #check: tf.contrib.training.stratified_sample
+    #for online resampling for equal pt/eta weights
+    trainingBatch = tf.train.batch_join(
+    #trainingBatch = tf.train.shuffle_batch_join(
         rootreader_op, 
         batch_size=batchSize, 
         capacity=capacity,
-        min_after_dequeue=minAfterDequeue,
-        enqueue_many=False #requires to read examples in batches!
+        #min_after_dequeue=minAfterDequeue,
+        enqueue_many=True #requires to read examples in batches!
     )
-
+    
     sess = tf.Session()
     sess.run(init_op)
 
@@ -134,11 +174,12 @@ for epoch in range(1):
     steps = 1
     try:
         while(True):
-            
-            print sess.run(trainingBatch)
-            print steps
+            t = time.time()
+            sess.run(trainingBatch)
+            t = time.time()-t
+            print "step %3i (%8.3fs)"%(steps,t)
             steps+=1
-            if steps>10:
+            if steps>50:
                 break
             #print sess.run(dequeue_op)
     except tf.errors.OutOfRangeError:

@@ -6,16 +6,16 @@ class root_reader():
     @staticmethod
     def slice_and_reshape(start,size,shape=None):
         if shape==None:
-            return lambda tensor: tf.slice(tensor,[start],[size])
+            return lambda tensor: tf.map_fn(lambda x: tf.slice(x,[start],[size]),tensor,back_prop=False,infer_shape=True)
         else:
-            return lambda tensor: tf.transpose(
-                tf.reshape(tf.slice(tensor,[start],[size]),shape)
-            )
+            return lambda tensor: tf.map_fn(lambda x: tf.transpose(tf.reshape(tf.slice(x,[start],[size]),shape)),tensor,back_prop=False,infer_shape=True)
+            
             
     def __init__(self,
         queue,
         feature_dict,
-        naninf=0
+        naninf=0,
+        batch=1
     ):
         self._feature_dict = feature_dict
         
@@ -29,15 +29,17 @@ class root_reader():
                     len(self._branch_list),
                     len(feature_values["branches"])
                 )
+                #print feature_name,len(self._branch_list),len(feature_values["branches"])
                 self._branch_list.extend(feature_values["branches"])
                 
             else:
+                self._output_formatters[feature_name]=root_reader.slice_and_reshape(
+                    len(self._branch_list),
+                    len(feature_values["branches"])*feature_values["max"],
+                    [len(feature_values["branches"]),feature_values["max"]]
+                )
+                #print feature_name,len(self._branch_list),len(feature_values["branches"])*feature_values["max"]
                 for branch_name in feature_values["branches"]:
-                    self._output_formatters[feature_name]=root_reader.slice_and_reshape(
-                        len(self._branch_list),
-                        len(feature_values["branches"])*feature_values["max"],
-                        #[feature_values["max"],len(feature_values["branches"])]
-                    )
                     self._branch_list.append(
                         branch_name+
                         "["+
@@ -46,12 +48,17 @@ class root_reader():
                         str(feature_values["max"])+
                         "]"
                     )
-                    print self._branch_list[-1]
+                 
+                
         self._op = rootreader_module.root_reader(
             queue.queue_ref, 
             naninf=naninf, 
-            branches=self._branch_list
+            branches=self._branch_list,
+            batch=batch
         )
+        
+    def raw(self):
+        return {"raw":self._op}
         
     def batch(self):
         result = {}
