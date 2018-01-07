@@ -6,10 +6,10 @@ class root_reader():
     @staticmethod
     def slice_and_reshape(start,size,shape=None):
         if shape==None:
-            return lambda tensor: tf.map_fn(lambda x: tf.slice(x,[start],[size]),tensor,back_prop=False,infer_shape=True)
+            return lambda tensor: rootreader_module.batched_transformation(tensor,start,size)
         else:
-            return lambda tensor: tf.map_fn(lambda x: tf.transpose(tf.reshape(tf.slice(x,[start],[size]),shape)),tensor,back_prop=False,infer_shape=True)
-            
+            #return lambda tensor: tf.map_fn(lambda x: tf.transpose(tf.reshape(tf.slice(x,[start],[size]),shape)),tensor,back_prop=False,infer_shape=True)
+            return lambda tensor: rootreader_module.batched_transformation(tensor,start,size,shape=shape,transpose=True)
             
     def __init__(self,
         queue,
@@ -21,23 +21,26 @@ class root_reader():
         
         self._branch_list = []
         self._output_formatters = {}
+        index = 0
         for feature_name in sorted(self._feature_dict.keys()):
             
             feature_values = self._feature_dict[feature_name]
             if feature_values["multiplicity"]==None:
                 self._output_formatters[feature_name]=root_reader.slice_and_reshape(
-                    len(self._branch_list),
+                    index,
                     len(feature_values["branches"])
                 )
+                index+=len(feature_values["branches"])
                 #print feature_name,len(self._branch_list),len(feature_values["branches"])
                 self._branch_list.extend(feature_values["branches"])
                 
             else:
                 self._output_formatters[feature_name]=root_reader.slice_and_reshape(
-                    len(self._branch_list),
+                    index,
                     len(feature_values["branches"])*feature_values["max"],
                     [len(feature_values["branches"]),feature_values["max"]]
                 )
+                index+=len(feature_values["branches"])*feature_values["max"]
                 #print feature_name,len(self._branch_list),len(feature_values["branches"])*feature_values["max"]
                 for branch_name in feature_values["branches"]:
                     self._branch_list.append(

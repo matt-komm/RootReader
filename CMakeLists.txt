@@ -19,7 +19,7 @@ include_directories(${TensorFlow_INCLUDE_DIRS} ${ROOT_INCLUDE_DIR})
 add_library(RootReader
     MODULE
     RootReader.cc
-    
+    BatchedTransformation.cc
 )
 target_link_libraries(RootReader ${TensorFlow_LIBRARY} ${ROOT_LIBRARIES})
 

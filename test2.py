@@ -19,12 +19,29 @@ fileList = fileList[:20]
 
 print fileList
 
-'''
-
-'''
-
 featureDict = {
-    "truth": {
+
+     "sv" : {
+        "branches":[
+            'sv_pt',
+            'sv_deltaR',
+            'sv_mass',
+            'sv_ntracks',
+            'sv_chi2',
+            'sv_normchi2',
+            'sv_dxy',
+            'sv_dxysig',
+            'sv_d3d',
+            'sv_d3dsig',
+            'sv_costhetasvpv',
+            'sv_enratio',
+            
+        ],
+        "multiplicity":"n_sv",
+        "max":4
+    },
+
+        "truth": {
         "branches":[
             'isB/UInt_t',
             'isBB/UInt_t',
@@ -53,7 +70,6 @@ featureDict = {
         ],
         "multiplicity":None
     },
-    
     "globals": {
         "branches": [
             'jet_pt',
@@ -73,26 +89,10 @@ featureDict = {
             'TagVarCSV_jetNTracksEtaRel'
         ],
         "multiplicity":None
+
     },
-     "sv" : {
-        "branches":[
-            'sv_pt',
-            'sv_deltaR',
-            'sv_mass',
-            'sv_ntracks',
-            'sv_chi2',
-            'sv_normchi2',
-            'sv_dxy',
-            'sv_dxysig',
-            'sv_d3d',
-            'sv_d3dsig',
-            'sv_costhetasvpv',
-            'sv_enratio',
-            
-        ],
-        "multiplicity":"n_sv",
-        "max":4
-    },
+
+
     "Cpfcan": {
         "branches": [
             'Cpfcan_BtagPf_trackEtaRel',
@@ -130,8 +130,6 @@ featureDict = {
     }
 }
 
-  
- 
 
 for epoch in range(1):
     print "epoch",epoch+1
@@ -140,22 +138,22 @@ for epoch in range(1):
     init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 
     rootreader_op = [
-        root_reader(fileListQueue, featureDict,batch=100).raw() for _ in range(4)
+        root_reader(fileListQueue, featureDict,batch=100).batch() for _ in range(4)
     ]
     print rootreader_op
     
     batchSize = 10000
     minAfterDequeue = batchSize*2
     capacity = minAfterDequeue + 3 * batchSize
-
+    
     #check: tf.contrib.training.stratified_sample
     #for online resampling for equal pt/eta weights
-    trainingBatch = tf.train.batch_join(
-    #trainingBatch = tf.train.shuffle_batch_join(
+    #trainingBatch = tf.train.batch_join(
+    trainingBatch = tf.train.shuffle_batch_join(
         rootreader_op, 
         batch_size=batchSize, 
         capacity=capacity,
-        #min_after_dequeue=minAfterDequeue,
+        min_after_dequeue=minAfterDequeue,
         enqueue_many=True #requires to read examples in batches!
     )
     
@@ -179,7 +177,7 @@ for epoch in range(1):
             t = time.time()-t
             print "step %3i (%8.3fs)"%(steps,t)
             steps+=1
-            if steps>50:
+            if steps>100:
                 break
             #print sess.run(dequeue_op)
     except tf.errors.OutOfRangeError:
