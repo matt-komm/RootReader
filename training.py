@@ -9,6 +9,15 @@ from keras.layers import Dense, Dropout, Flatten,Convolution2D, Convolution1D,LS
 from keras.layers.pooling import MaxPooling2D
 from keras.layers.normalization import BatchNormalization
 
+
+import imp
+try:
+    imp.find_module('setGPU')
+    import setGPU
+except ImportError:
+    pass
+
+
 def block_deepFlavourConvolutions(charged,neutrals,vertices,dropoutRate,active=True,batchnorm=False,batchmomentum=0.6):
     '''
     deep Flavour convolution part. 
@@ -155,8 +164,7 @@ def model_deepFlavourReference(Inputs,nclasses,nregclasses,dropoutRate=0.1,momen
 
 fileList = []
 
-filePath = "/media/matthias/HDD/matthias/Analysis/LLP/training/samples/rootFiles.raw.txt"
-#filePath = "/vols/cms/mkomm/LLP/samples/rootFiles.txt"
+filePath = "/vols/cms/mkomm/LLP/samples/rootFiles.txt"
 
 f = open(filePath)
 for l in f:
@@ -165,7 +173,7 @@ for l in f:
 f.close()
 print len(fileList)
 
-fileList = fileList[:4]
+fileList = fileList[:10]
 
 print fileList
 

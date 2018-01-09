@@ -1,10 +1,24 @@
 #include "tensorflow/core/framework/reader_base.h"
 #include "tensorflow/core/framework/op.h"
 
-#include <regex>
+
 
 using namespace tensorflow;
 
+//NOTE: regex is experimental in gcc 4.9 and below
+//TODO: define proper syntax and parsing e.g. support
+//  <name>; <name>/<type>; <name>[<num>,<max>]; <name>[<num>,<max>]/<type>
+//TODO (optional): add selections, add support for TSelector
+namespace syntax_test
+{
+    static bool isArray(const string& s)
+    {
+        auto p1 = std::find(s.begin(),s.end(),'[');
+        auto p2 = std::find(s.begin(),s.end(),',');
+        auto p3 = std::find(s.begin(),s.end(),']');
+        return p1!=s.end() and p2!=s.end() and p3!=s.end() and p1<p2 and p2<p3;;
+    }
+}
 
 REGISTER_OP("RootReader")
     .Input("queue_handle: resource")
@@ -20,8 +34,8 @@ REGISTER_OP("RootReader")
         unsigned int size = 0;
         for (auto name: branchNames)
         {
-            static std::regex syntaxRegex("[A-Za-z_0-9]+\\[[A-Za-z_0-9]+,[0-9]+\\]");
-            if (not std::regex_match(name.begin(),name.end(),syntaxRegex))
+            
+            if (not syntax_test::isArray(name))
             {
                 size+=1;
             }
@@ -215,20 +229,22 @@ class RootReaderOp:
             );
             for (auto& name: branchNames)
             {
-                static std::regex arraySyntaxRegex("[A-Za-z_0-9]+\\[[A-Za-z_0-9]+,[0-9]+\\]");
-                if (not std::regex_match(name.begin(),name.end(),arraySyntaxRegex))
+                if (not syntax_test::isArray(name))
                 {
                     auto it = std::find(name.begin(),name.end(),'/');
                     if (it==name.end())
                     {
+                        //std::cout<<name<<" = default"<<std::endl;
                         branches_.emplace_back(std::make_shared<SingleBranch<float>>(name));
                         size_+=1;
                     }
                     else
                     {
+                        //std::cout<<name<<" = typed"<<std::endl;
                         string type(it+1,name.end());
                         if (type=="UInt_t")
                         {
+
                             branches_.emplace_back(std::make_shared<SingleBranch<unsigned int, float>>(string(name.begin(),it)));
                             size_+=1;
                         }
