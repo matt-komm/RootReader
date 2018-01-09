@@ -23,10 +23,22 @@ add_library(RootReader
 )
 target_link_libraries(RootReader ${TensorFlow_LIBRARY} ${ROOT_LIBRARIES})
 
+add_library(RootWriter
+    MODULE
+    RootWriter.cc
+)
+target_link_libraries(RootWriter ${TensorFlow_LIBRARY} ${ROOT_LIBRARIES})
+
+
 add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0 -std=c++11)
 
 copy_file_if_changed(
     ${CMAKE_SOURCE_DIR}/root_reader.py
     ${CMAKE_CURRENT_BINARY_DIR}/root_reader.py
     RootReader
+)
+copy_file_if_changed(
+    ${CMAKE_SOURCE_DIR}/root_writer.py
+    ${CMAKE_CURRENT_BINARY_DIR}/root_writer.py
+    RootWriter
 )

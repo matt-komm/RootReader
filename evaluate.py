@@ -4,6 +4,7 @@ from keras import backend as K
 import os
 import time
 from root_reader import root_reader
+from root_writer import root_writer
 
 from keras.layers import Dense, Dropout, Flatten,Convolution2D, Convolution1D,LSTM,Concatenate
 from keras.layers.pooling import MaxPooling2D
@@ -230,8 +231,6 @@ featureDict = {
     },
     "global": {
         "branches": [
-            'genLL_decayLength',
-            
             'jet_pt',
             'jet_eta',
             'nCpfcand',
@@ -292,35 +291,24 @@ featureDict = {
 
 loss_mean = []
 
-for epoch in range(5):
-    print "epoch",epoch+1
-    fileListQueue = tf.train.string_input_producer(fileList, num_epochs=1, shuffle=True)
+for f in fileList:
+    fileListQueue = tf.train.string_input_producer([f], num_epochs=1, shuffle=False)
 
-    rootreader_op = [
-        root_reader(fileListQueue, featureDict,batch=100).batch() for _ in range(4)
-    ]
-    
-    batchSize = 10000
-    minAfterDequeue = batchSize*2
-    capacity = minAfterDequeue + 3*batchSize
-    
-    #check: tf.contrib.training.stratified_sample
-    #for online resampling for equal pt/eta weights
-    #trainingBatch = tf.train.batch_join(
-    trainingBatch = tf.train.shuffle_batch_join(
+    rootreader_op = root_reader(fileListQueue, featureDict,batch=1).batch()
+    trainingBatch = tf.train.batch(
         rootreader_op, 
-        batch_size=batchSize, 
-        capacity=capacity,
-        min_after_dequeue=minAfterDequeue,
+        batch_size=1, 
+        capacity=1,
         enqueue_many=True #requires to read examples in batches!
     )
-
+    
     globalvars = keras.layers.Input(tensor=trainingBatch['global'])
     cpf = keras.layers.Input(tensor=trainingBatch['Cpfcan'])
     npf = keras.layers.Input(tensor=trainingBatch['Npfcan'])
     vtx = keras.layers.Input(tensor=trainingBatch['sv'])
     truth = trainingBatch["truth"]
-    #dequeueBatch = trainingBatch['Npfcan'].dequeue()
+    
+
 
     nclasses = truth.shape.as_list()[1]
     print nclasses
@@ -329,14 +317,8 @@ for epoch in range(5):
     loss = tf.reduce_mean(keras.losses.categorical_crossentropy(truth, prediction))
     accuracy,accuracy_op = tf.metrics.accuracy(tf.argmax(truth,1),tf.argmax(prediction,1))
     model = keras.Model(inputs=inputs, outputs=prediction)
-    
-    #model.add_loss(loss)
-    #model.compile(optimizer='rmsprop', loss=None)
-    #model.summary()
-    train_op = tf.train.GradientDescentOptimizer(0.01).minimize(loss)
 
-
-
+    rootwriter_op = root_writer(prediction,featureDict["truth"]["branches"],"out","out.root").write()
     #init_op = tf.global_variables_initializer() #bug https://github.com/tensorflow/tensorflow/issues/1045
     init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 
@@ -348,34 +330,32 @@ for epoch in range(5):
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
     total_loss = 0
     
-    if os.path.exists("model_epoch"+str(epoch-1)+".hdf5"):
-        print "loading weights ..."
-        model.load_weights("model_epoch"+str(epoch-1)+".hdf5") #use after init_op which initializes random weights!!!
+    print "loading weights ..."
+    model.load_weights("model_epoch4.hdf5") #use after init_op which initializes random weights!!!
     
     try:
         step = 0
         while not coord.should_stop():
             start_time = time.time()
 
-            _, loss_value, accuracy_value = sess.run([train_op, loss,accuracy_op], feed_dict={K.learning_phase(): 1}) #pass 1 for training, 0 for testing
-            total_loss+=loss_value
-            
+            loss_value,accuracy_value,_= sess.run([loss,accuracy_op,rootwriter_op], feed_dict={K.learning_phase(): 0}) #pass 1 for training, 0 for testing
+            #print result
             #data = sess.run(trainingBatch)
-            #print data
             duration = time.time() - start_time
-            if step % 1 == 0:
-                print 'Step %d: loss = %.2f, accuracy = %.1f%% (%.3f sec)' % (step, loss_value,accuracy_value*100.,duration)
+            if step % 100 == 0:
+                print 'Step %d: loss = %.2f, accuracy=%.1f%% (%.3f sec)' % (step, loss_value,accuracy_value*100.,duration)
             step += 1
+            '''
+            if step>10:
+                break
+            '''
     except tf.errors.OutOfRangeError:
         print('Done training for %d steps.' % (step))
-    model.save_weights("model_epoch"+str(epoch)+".hdf5")
-    loss_mean.append(total_loss/step)
+
     coord.request_stop()
     coord.join(threads)
     K.clear_session()
-        
-for i,l in enumerate(loss_mean):
-    print i+1,l
+    break
     
     
     
