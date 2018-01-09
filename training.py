@@ -282,7 +282,7 @@ featureDict = {
 
 loss_mean = []
 
-for epoch in range(10):
+for epoch in range(5):
     print "epoch",epoch+1
     fileListQueue = tf.train.string_input_producer(fileList, num_epochs=1, shuffle=True)
 
@@ -318,9 +318,7 @@ for epoch in range(10):
     prediction = model_deepFlavourReference(inputs,nclasses,1,dropoutRate=0.1,momentum=0.6)
     loss = tf.reduce_mean(keras.losses.categorical_crossentropy(truth, prediction))
     model = keras.Model(inputs=inputs, outputs=prediction)
-    if os.path.exists("model_epoch"+str(epoch-1)+".hdf5"):
-        print "loading weights ..."
-        model.load_weights("model_epoch"+str(epoch-1)+".hdf5")
+    
     #model.add_loss(loss)
     #model.compile(optimizer='rmsprop', loss=None)
     #model.summary()
@@ -338,6 +336,11 @@ for epoch in range(10):
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
     total_loss = 0
+    
+    if os.path.exists("model_epoch"+str(epoch-1)+".hdf5"):
+        print "loading weights ..."
+        model.load_weights("model_epoch"+str(epoch-1)+".hdf5") #use after init_op which initializes random weights!!!
+    
     try:
         step = 0
         while not coord.should_stop():
@@ -360,7 +363,7 @@ for epoch in range(10):
     coord.join(threads)
     K.clear_session()
         
-for i,l in enumerate(total_loss):
+for i,l in enumerate(loss_mean):
     print i+1,l
     
     
