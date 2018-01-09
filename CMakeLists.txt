@@ -1,5 +1,5 @@
 project(RootReader)
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 2.8)
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR} ${CMAKE_MODULE_PATH})
 
 macro(copy_file_if_changed in_file out_file target)  
@@ -23,7 +23,7 @@ add_library(RootReader
 )
 target_link_libraries(RootReader ${TensorFlow_LIBRARY} ${ROOT_LIBRARIES})
 
-add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
+add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0 -std=c++11)
 
 copy_file_if_changed(
     ${CMAKE_SOURCE_DIR}/root_reader.py
