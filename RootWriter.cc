@@ -187,7 +187,6 @@ class RootWriterOp:
             OpKernel(context),
             outputFile_(nullptr)
         {
-            std::cout<<"create writer"<<std::endl;
             
             std::vector<string> branchNames;
             OP_REQUIRES_OK(

@@ -14,6 +14,7 @@ class root_reader():
     def __init__(self,
         queue,
         feature_dict,
+        treename,
         naninf=0,
         batch=1
     ):
@@ -55,8 +56,9 @@ class root_reader():
                 
         self._op = rootreader_module.root_reader(
             queue.queue_ref, 
+            self._branch_list,
+            treename=treename,
             naninf=naninf, 
-            branches=self._branch_list,
             batch=batch
         )
         

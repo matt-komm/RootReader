@@ -22,10 +22,11 @@ namespace syntax_test
 
 REGISTER_OP("RootReader")
     .Input("queue_handle: resource")
-    .Output("out: float32")
     .Attr("branches: list(string)")
+    .Attr("treename: string")
     .Attr("naninf: int = 0")
     .Attr("batch: int = 1")
+    .Output("out: float32")
     .SetIsStateful()
     .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) 
     {
@@ -201,9 +202,10 @@ class RootReaderOp:
         size_t currentEntry_;
         
         int naninf_;
-        
+        string treename_;
         unsigned int size_;
         int nBatch_;
+        unsigned int nEvents_;
         
     public:
         explicit RootReaderOp(OpKernelConstruction* context): 
@@ -212,12 +214,20 @@ class RootReaderOp:
             currentEntry_(0),
             naninf_(0),
             size_(0),
-            nBatch_(1)
+            nBatch_(1),
+            nEvents_(0)
         {
+        
+            mutex_lock globalLock(globalMutexForROOT_);
+            
             std::vector<string> branchNames;
             OP_REQUIRES_OK(
                 context,
                 context->GetAttr("branches",&branchNames)
+            );
+            OP_REQUIRES_OK(
+                context,
+                context->GetAttr("treename",&treename_)
             );
             OP_REQUIRES_OK(
                 context,
@@ -274,7 +284,8 @@ class RootReaderOp:
         
         virtual ~RootReaderOp()
         {
-            std::cout<<"final read: "<<currentEntry_<<std::endl;
+            mutex_lock globalLock(globalMutexForROOT_);
+            //std::cout<<"final read: "<<currentEntry_<<std::endl;
             branches_.clear();
             arrayLengths_.clear();
         }
@@ -300,11 +311,11 @@ class RootReaderOp:
                 //creating TFile/setting branch adresses is not thread safe
                 mutex_lock rootLock(globalMutexForROOT_);
                 //TODO: use TF logging and set loglevel
-                std::cout<<"opening file: "<<fileName<<std::endl;
+                //std::cout<<"opening file: "<<fileName<<std::endl;
                 inputFile_.reset(new TFile(fileName.c_str()));
                 currentEntry_ = 0;
                 //TODO: make treename configurable
-                tree_ = dynamic_cast<TTree*>(inputFile_->Get("deepntuplizer/tree"));
+                tree_ = dynamic_cast<TTree*>(inputFile_->Get(treename_.c_str()));
                 if (not tree_)
                 {
                     throw std::runtime_error("Cannot get tree 'deepntuplizer/tree' from file "+fileName);
@@ -317,11 +328,11 @@ class RootReaderOp:
                 {
                     branchPair.second->setBranchAddress(tree_);
                 }
-                
+                nEvents_ = tree_->GetEntries();
             }
             Tensor* output_tensor = nullptr;
             TensorShape shape;
-            unsigned int nBatches = std::min<unsigned int>(tree_->GetEntries()-currentEntry_,nBatch_);
+            unsigned int nBatches = std::min<unsigned int>(nEvents_-currentEntry_,nBatch_);
             shape.AddDim(nBatches);
             shape.AddDim(size_);
             OP_REQUIRES_OK(context, context->allocate_output("out", shape,&output_tensor));
@@ -340,8 +351,9 @@ class RootReaderOp:
                 ++currentEntry_;
             }
             //std::cout<<std::endl;
-            if (currentEntry_>=tree_->GetEntries())
+            if (currentEntry_>=nEvents_)
             {
+                mutex_lock globalLock(globalMutexForROOT_);
                 inputFile_->Close();
                 inputFile_.reset(nullptr);
             }
