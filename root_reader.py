@@ -15,8 +15,8 @@ class root_reader():
         queue,
         feature_dict,
         treename,
-        naninf=0,
-        batch=1
+        batch=1,
+        naninf=0
     ):
         self._feature_dict = feature_dict
         
@@ -54,7 +54,7 @@ class root_reader():
                     )
                  
                 
-        self._op = rootreader_module.root_reader(
+        self._op, self._num = rootreader_module.root_reader(
             queue.queue_ref, 
             self._branch_list,
             treename=treename,
@@ -63,12 +63,13 @@ class root_reader():
         )
         
     def raw(self):
-        return {"raw":self._op}
+        return {"raw":self._op,"num":self._num}
         
     def batch(self):
         result = {}
         for featureName in sorted(self._output_formatters.keys()):
             result[featureName]=self._output_formatters[featureName](self._op)
+        result["num"] = self._num
         return result
         
             

@@ -27,6 +27,7 @@ REGISTER_OP("RootReader")
     .Attr("naninf: int = 0")
     .Attr("batch: int = 1")
     .Output("out: float32")
+    .Output("num: int32")
     .SetIsStateful()
     .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) 
     {
@@ -50,8 +51,11 @@ REGISTER_OP("RootReader")
             }
         }
         //shape_inference::ShapeHandle s = c->MakeShape({c->MakeDim(branchNames.size())});
-        shape_inference::ShapeHandle s = c->MakeShape({-1,c->MakeDim(size)});
-        c->set_output(0, s);
+        shape_inference::ShapeHandle s1 = c->MakeShape({-1,c->MakeDim(size)});
+        c->set_output(0, s1);
+        
+        shape_inference::ShapeHandle s2 = c->MakeShape({-1,1});
+        c->set_output(1, s2);
         return Status::OK();
     })
     .Doc(R"doc(A Reader that outputs the lines of a file delimited by '\n'.)doc");
@@ -337,13 +341,21 @@ class RootReaderOp:
             shape.AddDim(size_);
             OP_REQUIRES_OK(context, context->allocate_output("out", shape,&output_tensor));
             
+            Tensor* output_num = nullptr;
+            TensorShape shape_num;
+            shape_num.AddDim(nBatches);
+            shape_num.AddDim(1);
+            OP_REQUIRES_OK(context, context->allocate_output("num", shape_num,&output_num));
+            
             auto output_flat = output_tensor->flat<float>();
+            auto output_num_flat = output_num->flat<int>();
             unsigned int index = 0;
             //std::cout<<"prepare batch ..."<<std::endl;
             for (unsigned int ibatch=0; ibatch<nBatches;++ibatch)
             {
                 //std::cout<<currentEntry_<<",";
                 tree_->GetEntry(currentEntry_);
+                output_num_flat(ibatch)=currentEntry_;
                 for (auto& branch: branches_)
                 {
                     index = branch->fillTensor(output_flat,index,naninf_);

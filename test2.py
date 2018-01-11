@@ -5,8 +5,8 @@ from root_reader import root_reader
 
 fileList = []
 
-filePath = "/media/matthias/HDD/matthias/Analysis/LLP/training/samples/rootFiles.raw.txt"
-#filePath = "/vols/cms/mkomm/LLP/samples/rootFiles.txt"
+#filePath = "/media/matthias/HDD/matthias/Analysis/LLP/training/samples/rootFiles.txt"
+filePath = "/vols/cms/mkomm/LLP/samples/rootFiles.txt"
 
 f = open(filePath)
 for l in f:
@@ -138,11 +138,11 @@ for epoch in range(1):
     init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 
     rootreader_op = [
-        root_reader(fileListQueue, featureDict,batch=100).batch() for _ in range(4)
+        root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=100).raw() for _ in range(4)
     ]
     print rootreader_op
     
-    batchSize = 10000
+    batchSize = 1
     minAfterDequeue = batchSize*2
     capacity = minAfterDequeue + 3 * batchSize
     
@@ -173,11 +173,12 @@ for epoch in range(1):
     try:
         while(True):
             t = time.time()
-            sess.run(trainingBatch)
+            result = sess.run(trainingBatch)
+            print len(result["raw"][0])
             t = time.time()-t
             print "step %3i (%8.3fs)"%(steps,t)
             steps+=1
-            if steps>100:
+            if steps>10:
                 break
             #print sess.run(dequeue_op)
     except tf.errors.OutOfRangeError:

@@ -228,9 +228,11 @@ class RootWriterOp:
         
         virtual ~RootWriterOp()
         {
-            branches_.clear();
+            mutex_lock rootLock(globalMutexForROOT_);
+            outputFile_->cd();
             tree_->Write();
             outputFile_->Close();
+            branches_.clear();
         }
 
         void Compute(OpKernelContext* context)
@@ -250,6 +252,8 @@ class RootWriterOp:
                 //std::cout<<"writing "<<branches_[i]->name()<<" = "<<input(i)<<std::endl;
                 branches_[i]->value()=input(i);
             }
+            mutex_lock rootLock(globalMutexForROOT_);
+            outputFile_->cd();
             tree_->Fill();
             
             /*

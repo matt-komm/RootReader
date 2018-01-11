@@ -20,18 +20,17 @@ except ImportError:
 
 
 
-fileList = []
-
-filePath = "/vols/cms/mkomm/LLP/samples/rootFiles.txt"
-
-f = open(filePath)
+fileListTrain = []
+filePathTrain = "/vols/cms/mkomm/LLP/samples/rootFiles_stripped2.txt"
+f = open(filePathTrain)
 for l in f:
-    absPath = os.path.join(filePath.rsplit('/',1)[0],l.replace("\n","").replace("\r","")+"")
-    fileList.append(absPath)
+    absPath = os.path.join(filePathTrain.rsplit('/',1)[0],l.replace("\n","").replace("\r","")+"")
+    fileListTrain.append(absPath)
 f.close()
-print "files ",len(fileList)
+print "files train ",len(fileListTrain)
 
-fileList = fileList[:20]
+
+#fileListTrain = fileListTrain[:6]
 
 #print fileList
 
@@ -152,15 +151,14 @@ featureDict = {
     }
 }
 
-loss_mean = []
-
-for epoch in range(60):
+for epoch in range(40):
     epoch_duration = time.time()
     print "epoch",epoch+1
-    fileListQueue = tf.train.string_input_producer(fileList, num_epochs=1, shuffle=True)
+    fileListQueue = tf.train.string_input_producer(fileListTrain, num_epochs=1, shuffle=True)
 
+    #TODO: split 10% off inside root_reader for online testing
     rootreader_op = [
-        root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=100).batch() for _ in range(4)
+        root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=100).batch() for _ in range(6)
     ]
     
     batchSize = 10000
@@ -189,7 +187,7 @@ for epoch in range(60):
     nclasses = truth.shape.as_list()[1]
     inputs = [globalvars,cpf,npf,vtx]
     prediction = model_deepFlavourReference(inputs,nclasses,1,dropoutRate=0.1,momentum=0.6)
-    loss = tf.reduce_sum(keras.losses.categorical_crossentropy(truth, prediction))
+    loss = tf.reduce_mean(keras.losses.categorical_crossentropy(truth, prediction))
     accuracy,accuracy_op = tf.metrics.accuracy(tf.argmax(truth,1),tf.argmax(prediction,1))
     model = keras.Model(inputs=inputs, outputs=prediction)
     
@@ -233,9 +231,8 @@ for epoch in range(60):
             step += 1
             start_time = time.time()
 
-            _, loss_value, accuracy_value = sess.run([train_op, loss,accuracy_op], feed_dict={K.learning_phase(): 1}) #pass 1 for training, 0 for testing
+            _, loss_value, accuracy_value = sess.run([train_op, loss,accuracy_op], feed_dict={K.learning_phase(): 0}) #pass 1 for training, 0 for testing
             total_loss+=loss_value
-            
             #data = sess.run(trainingBatch)
             #print data
             duration = time.time() - start_time
@@ -246,13 +243,12 @@ for epoch in range(60):
     model.save_weights("model_epoch"+str(epoch)+".hdf5")
     print "Epoch duration = (%.1f min)"%((time.time()-epoch_duration)/60.)
     print "Average loss = ",(total_loss/step)
-    loss_mean.append(total_loss/step)
+    f = open("model_epoch.stat","a")
+    f.write(str(epoch)+";"+str(total_loss/step)+";"+str(accuracy_value*100.)+"\n")
+    f.close()
     coord.request_stop()
     coord.join(threads)
     K.clear_session()
-        
-for i,l in enumerate(loss_mean):
-    print i+1,l
     
     
     

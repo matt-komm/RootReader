@@ -10,6 +10,11 @@ from keras.layers import Dense, Dropout, Flatten,Convolution2D, Convolution1D,LS
 from keras.layers.pooling import MaxPooling2D
 from keras.layers.normalization import BatchNormalization
 
+from optparse import OptionParser
+parser = OptionParser()
+parser.add_option("-s", "--start", dest="start",default=0)
+parser.add_option("-e", "--end",dest="end", default=-1)
+(options, args) = parser.parse_args()
 
 import imp
 try:
@@ -23,18 +28,29 @@ from deepFlavour import model_deepFlavourReference
 
 fileList = []
 
-filePath = "/vols/cms/mkomm/LLP/samples/rootFiles.txt"
+filePath = "/vols/cms/mkomm/LLP/samples/rootFiles_test_stripped.txt"
 
 f = open(filePath)
 for l in f:
     absPath = os.path.join(filePath.rsplit('/',1)[0],l.replace("\n","").replace("\r","")+"")
     fileList.append(absPath)
 f.close()
+
+start = 0
+end = -1
+try: 
+    start = int(options.start)
+    end = int(options.end)
+    fileList = fileList[start:end]
+except Exception, e:
+    print e
+    sys.exit(1)
+
 print len(fileList)
 
-fileList = fileList[:10]
+#fileList = fileList[20:21]
 
-print fileList
+#print fileList
 
 featureDict = {
 
@@ -149,8 +165,9 @@ featureDict = {
 
 loss_mean = []
 
-for f in fileList:
-    fileListQueue = tf.train.string_input_producer([f], num_epochs=1, shuffle=False)
+for ifile,fileName in enumerate(fileList):
+    print ifile+1,"/",len(fileList),": ",fileName
+    fileListQueue = tf.train.string_input_producer([fileName], num_epochs=1, shuffle=False)
 
     rootreader_op = root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=1).batch()
     
@@ -160,18 +177,20 @@ for f in fileList:
     vtx = keras.layers.Input(tensor=rootreader_op['sv'])
     #gen = keras.layers.Input(tensor=tf.constant(0.,shape=[1,1]),shape=(1,))
     truth = rootreader_op["truth"]
+    num = rootreader_op["num"]
     
-
-
     nclasses = truth.shape.as_list()[1]
     print nclasses
     inputs = [globalvars,cpf,npf,vtx]
     prediction = model_deepFlavourReference(inputs,nclasses,1,dropoutRate=0.1,momentum=0.6)
-    loss = tf.reduce_sum(tf.square(keras.losses.categorical_crossentropy(truth, prediction)))
+    loss = tf.reduce_sum(keras.losses.categorical_crossentropy(truth, prediction))
     accuracy,accuracy_op = tf.metrics.accuracy(tf.argmax(truth,1),tf.argmax(prediction,1))
     model = keras.Model(inputs=inputs, outputs=prediction)
-
-    rootwriter_op = root_writer(prediction,featureDict["truth"]["branches"],"deepntuplizer/tree","out.root").write()
+    eval_labels = []
+    for branch in featureDict["truth"]["branches"]:
+        s = branch.rsplit("/",1)
+        eval_labels.append("eval_"+s[0]+"/"+s[1])
+    rootwriter_op = root_writer(prediction,eval_labels,"evaluated",fileName+".friend").write()
     #init_op = tf.global_variables_initializer() #bug https://github.com/tensorflow/tensorflow/issues/1045
     init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 
@@ -184,32 +203,35 @@ for f in fileList:
     total_loss = 0
     
     print "loading weights ..."
-    model.load_weights("model_epoch9.hdf5") #use after init_op which initializes random weights!!!
+    model.load_weights("model_epoch14.hdf5") #use after init_op which initializes random weights!!!
     
     try:
         step = 0
         while not coord.should_stop():
             start_time = time.time()
 
-            loss_value,accuracy_value,_= sess.run([loss,accuracy_op,rootwriter_op], feed_dict={K.learning_phase(): 0}) #pass 1 for training, 0 for testing
-            #print result
+            #TODO: figure out why setting training phase to 0 gives very wrong results (e.g. remove batchnorm layers)
+            num_value,prediction_value,truth_value,loss_value,accuracy_value,_= sess.run([num,prediction,truth,loss,accuracy_op,rootwriter_op], feed_dict={K.learning_phase(): 0}) #pass 1 for training, 0 for testing
+            #print prediction_value,truth_value
             #data = sess.run(trainingBatch)
+            #print
+            #print prediction_value,pred_max
+            #print truth_value,truth_max
+            #print truth_value,max_truth
             duration = time.time() - start_time
-            if step % 100 == 0:
+            if step % 10000 == 0:
                 print 'Step %d: loss = %.2f, accuracy=%.1f%% (%.3f sec)' % (step, loss_value,accuracy_value*100.,duration)
             step += 1
-            '''
-            if step>10:
-                break
-            '''
+            
+            
+            
     except tf.errors.OutOfRangeError:
-        print('Done training for %d steps.' % (step))
+        print('Done evaluation for %d steps.' % (step))
 
     coord.request_stop()
     coord.join(threads)
     K.clear_session()
-    break
-    
+
     
     
     
