@@ -37,150 +37,12 @@ REGISTER_OP("RootWriter")
 class RootWriterOp:
     public OpKernel
 {
-
-    public:
-        template<typename OUT>
-        class Branch
-        {
-            protected:
-                string name_;
-            public:
-                Branch(const string& name):
-                    name_(name)
-                {
-                }
-                
-                inline const string name() const
-                {
-                    return name_;
-                }
-                
-                static OUT resetNanOrInf(const OUT& v, const OUT& reset)
-                {
-                    if (std::isnan(v) or std::isinf(v))
-                    {
-                        return reset;
-                    }
-                    return v;
-                }
-                
-                virtual void setBranchAddress(TTree* tree) = 0;
-                virtual void bookBranchAddress(TTree* tree) = 0;
-                virtual unsigned int fillTensor(typename TTypes<OUT>::Flat& flatTensor, unsigned int index, const OUT& reset) const = 0;
-        };
-        
-        template<typename IN, typename OUT=IN>
-        class SingleBranch:
-            public Branch<OUT>
-        {
-            private:
-                IN value_;
-            public:
-                SingleBranch(const string& name):
-                    Branch<OUT>(name)
-                {
-                }
-                
-                inline const IN& value() const
-                {
-                    return value_;
-                }
-                
-                inline IN& value()
-                {
-                    return value_;
-                }
-                
-                virtual void bookBranchAddress(TTree* tree)
-                {
-                    tree->Branch(Branch<OUT>::name().c_str(),&value_);
-                    //std::cout<<"booking branch "<<Branch<OUT>::name()<<std::endl;
-                }
-                
-                virtual void setBranchAddress(TTree* tree)
-                {
-                    if(tree->SetBranchAddress(Branch<OUT>::name().c_str(),&value_)<0)
-                    {
-                        throw std::runtime_error("No branch with name '"+Branch<OUT>::name()+"' in tree");
-                    }
-                }
-                
-                virtual unsigned int fillTensor(typename TTypes<OUT>::Flat& flatTensor,unsigned int index, const OUT& reset) const
-                {
-                    flatTensor(index)=Branch<OUT>::resetNanOrInf(value_,reset);
-                    //std::cout<<index<<": "<<Branch<OUT>::name()<<"="<<flatTensor(index)<<std::endl;
-                    return index+1;
-                }
-        }; 
-        
-        template<typename IN, typename OUT=IN>
-        class ArrayBranch:
-            public Branch<OUT>
-        {
-            private:
-                alignas(16) IN values_[50]; //there is some odd bug when using dynamic allocated arrays and root
-                unsigned int size_;
-                std::shared_ptr<SingleBranch<unsigned int,OUT>> length_;
-                 
-            public:
-                ArrayBranch(const string& name, std::shared_ptr<SingleBranch<unsigned int,OUT>>& length, unsigned int size):
-                    Branch<OUT>(name),
-                    length_(length),
-                    size_(size)
-                {
-                }
-                
-                inline const IN& value(unsigned int index) const
-                {
-                    if (index>=size_)
-                    {
-                        throw std::runtime_error("Array index out-of-range");
-                    }
-                    return values_[index];
-                }
-                
-                virtual ~ArrayBranch()
-                {
-                    //delete[] values_;
-                }
-                
-                virtual void bookBranchAddress(TTree* tree)
-                {
-                    tree->Branch(Branch<OUT>::name().c_str(),&values_);
-                }
-                
-                //error codes: https://root.cern.ch/doc/master/classTTree.html#a1a48bf75621868a514741b27252cad96
-                virtual void setBranchAddress(TTree* tree)
-                {
-                    if(tree->SetBranchAddress(Branch<OUT>::name().c_str(),values_)<0)
-                    {
-                        throw std::runtime_error("No branch with name '"+Branch<OUT>::name()+"' in tree");
-                    }
-                }
-                virtual unsigned int fillTensor(typename TTypes<OUT>::Flat& flatTensor, unsigned int index, const OUT& reset) const
-                {
-                    //std::cout<<Branch<OUT>::name()<<", length="<<length_->value()<<std::endl;
-                    for (unsigned int i = 0; i < std::min(length_->value(),size_); ++i)
-                    {
-                        //std::cout<<(index+i)<<": "<<values_[i]<<std::endl;
-                        flatTensor(index+i)=Branch<OUT>::resetNanOrInf(values_[i],reset);
-                    }
-                    for (unsigned int i = std::min(length_->value(),size_); i < size_; ++i)
-                    {
-                        //std::cout<<(index+i)<<": padded"<<std::endl;
-                        flatTensor(index+i) = 0; //zero padding
-                    }
-                    
-                    return index+size_;
-                }
-        };
-        
     private:
         static mutex globalMutexForROOT_; //protects ROOT
         mutex localMutex_; //protects class members
         std::unique_ptr<TFile> outputFile_;
         TTree* tree_;
-        std::vector<std::shared_ptr<SingleBranch<float>>> branches_;
+        std::vector<std::pair<std::string,float>> branches_;
         
     public:
         explicit RootWriterOp(OpKernelConstruction* context): 
@@ -217,19 +79,23 @@ class RootWriterOp:
                 if (p!=name.end())
                 {
                     branchName = string(name.begin(),p);
-                }   
+                }
+                /*
+                if (std::find(branches_.begin(),branches_.end(),[&branchName](const auto& elem)->bool{elem.first==branchName})!=branches_.end())
+                {
+                }
+                */
+                auto branch = std::pair<std::string,float>(branchName,0.f);
                 //std::cout<<name<<" = default"<<std::endl;
-                std::shared_ptr<SingleBranch<float>> singleBranch = std::make_shared<SingleBranch<float>>(branchName);
-                singleBranch->bookBranchAddress(tree_);
-                branches_.emplace_back(singleBranch);
+                tree_->Branch(branch.first.c_str(),&branch.second);
+                branches_.emplace_back(std::move(branch));
             }
-            
         }
         
         virtual ~RootWriterOp()
         {
             mutex_lock rootLock(globalMutexForROOT_);
-            outputFile_->cd();
+            outputFile_->cd(); //set gDirectory
             tree_->Write();
             outputFile_->Close();
             branches_.clear();
@@ -250,25 +116,15 @@ class RootWriterOp:
             for (unsigned int i = 0; i < input.size(); ++i)
             {
                 //std::cout<<"writing "<<branches_[i]->name()<<" = "<<input(i)<<std::endl;
-                branches_[i]->value()=input(i);
+                branches_[i].second=input(i);
             }
             mutex_lock rootLock(globalMutexForROOT_);
-            outputFile_->cd();
+            outputFile_->cd(); //set gDirectory
             tree_->Fill();
-            
-            /*
-            Tensor* output_tensor = nullptr;
-            TensorShape shape;
-            shape.AddDim(1);
-            OP_REQUIRES_OK(context, context->allocate_output("output", shape,&output_tensor));
-            auto output = output_tensor->flat<float>();
-            output(0)=0;
-            */
         }
-            
 };
 
-mutex RootWriterOp::globalMutexForROOT_;
+//mutex RootWriterOp::globalMutexForROOT_;
 
 REGISTER_KERNEL_BUILDER(Name("RootWriter").Device(DEVICE_CPU),RootWriterOp);
 

@@ -19,6 +19,10 @@ fileList = fileList[:5]
 
 print fileList
 
+def createReader():
+    
+    return batch
+
 for epoch in range(1):
     print "epoch",epoch+1
     fileListQueue = tf.train.string_input_producer(fileList, num_epochs=2, shuffle=True)
@@ -29,18 +33,19 @@ for epoch in range(1):
 
     print fileListQueue.queue_ref
 
-    rootreader_op = [
+    batch, num = rootreader_module.root_reader(
+        fileListQueue.queue_ref,
         [
-            rootreader_module.root_reader(fileListQueue.queue_ref, naninf=0, branches=[
-                "jet_pt",
-                "jet_eta",
-                "sv_pt[n_sv,2]",
-                "sv_eta[n_sv,2]",
-                #"genLL_decayLength"
-            ])
-        ] for _ in range(1)
-    ]
-
+            "jet_pt",
+            "jet_eta",
+            "sv_pt[n_sv,2]",
+            "sv_eta[n_sv,2]",
+            "genLL_decayLength"
+        ],
+        "deepntuplizer/tree",
+        naninf=0
+    )
+    '''
     batchSize = 1
     minAfterDequeue = batchSize*2
     capacity = minAfterDequeue + 3 * batchSize
@@ -53,7 +58,7 @@ for epoch in range(1):
         min_after_dequeue=minAfterDequeue,
         enqueue_many=False #requires to read examples in batches!
     )
-
+    '''
     sess = tf.Session()
     sess.run(init_op)
 
@@ -70,7 +75,9 @@ for epoch in range(1):
     try:
         while(True):
             
-            print sess.run(trainingBatch)
+            batch_value, num_value = sess.run([batch,num])
+            print batch_value
+            print num_value
             print steps
             steps+=1
             if steps>10:

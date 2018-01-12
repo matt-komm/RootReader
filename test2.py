@@ -5,8 +5,8 @@ from root_reader import root_reader
 
 fileList = []
 
-#filePath = "/media/matthias/HDD/matthias/Analysis/LLP/training/samples/rootFiles.txt"
-filePath = "/vols/cms/mkomm/LLP/samples/rootFiles.txt"
+filePath = "/media/matthias/HDD/matthias/Analysis/LLP/training/samples/rootFiles.raw.txt"
+#filePath = "/vols/cms/mkomm/LLP/samples/rootFiles.txt"
 
 f = open(filePath)
 for l in f:
@@ -20,8 +20,13 @@ fileList = fileList[:20]
 print fileList
 
 featureDict = {
-
-     "sv" : {
+    "test": {
+        "branches": [
+            "nsv"
+        ],
+        "multiplicity":None
+    },
+    "sv" : {
         "branches":[
             'sv_pt',
             'sv_deltaR',
@@ -39,34 +44,36 @@ featureDict = {
         ],
         "multiplicity":"n_sv",
         "max":4
-    },
+    }
+}
+'''
 
         "truth": {
         "branches":[
-            'isB/UInt_t',
-            'isBB/UInt_t',
-            'isGBB/UInt_t',
-            'isLeptonicB/UInt_t',
-            'isLeptonicB_C/UInt_t',
-            'isC/UInt_t',
-            'isCC/UInt_t',
-            'isGCC/UInt_t',
-            'isUD/UInt_t',
-            'isS/UInt_t',
-            'isG/UInt_t',
-            'isUndefined/UInt_t',
-            'isFromLLgno_isB/UInt_t',
-            'isFromLLgno_isBB/UInt_t',
-            'isFromLLgno_isGBB/UInt_t',
-            'isFromLLgno_isLeptonicB/UInt_t',
-            'isFromLLgno_isLeptonicB_C/UInt_t',
-            'isFromLLgno_isC/UInt_t',
-            'isFromLLgno_isCC/UInt_t',
-            'isFromLLgno_isGCC/UInt_t',
-            'isFromLLgno_isUD/UInt_t',
-            'isFromLLgno_isS/UInt_t',
-            'isFromLLgno_isG/UInt_t',
-            'isFromLLgno_isUndefined/UInt_t'
+            'isB/i',
+            'isBB/i',
+            'isGBB/i',
+            'isLeptonicB/i',
+            'isLeptonicB_C/i',
+            'isC/i',
+            'isCC/i',
+            'isGCC/i',
+            'isUD/i',
+            'isS/i',
+            'isG/i',
+            'isUndefined/i',
+            'isFromLLgno_isB/i',
+            'isFromLLgno_isBB/i',
+            'isFromLLgno_isGBB/i',
+            'isFromLLgno_isLeptonicB/i',
+            'isFromLLgno_isLeptonicB_C/i',
+            'isFromLLgno_isC/i',
+            'isFromLLgno_isCC/i',
+            'isFromLLgno_isGCC/i',
+            'isFromLLgno_isUD/i',
+            'isFromLLgno_isS/i',
+            'isFromLLgno_isG/i',
+            'isFromLLgno_isUndefined/i'
         ],
         "multiplicity":None
     },
@@ -129,7 +136,7 @@ featureDict = {
         "max":25
     }
 }
-
+'''
 
 for epoch in range(1):
     print "epoch",epoch+1
@@ -138,11 +145,11 @@ for epoch in range(1):
     init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 
     rootreader_op = [
-        root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=100).raw() for _ in range(4)
+        root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=100).batch() for _ in range(4)
     ]
     print rootreader_op
     
-    batchSize = 1
+    batchSize = 2
     minAfterDequeue = batchSize*2
     capacity = minAfterDequeue + 3 * batchSize
     
@@ -174,7 +181,8 @@ for epoch in range(1):
         while(True):
             t = time.time()
             result = sess.run(trainingBatch)
-            print len(result["raw"][0])
+            print result
+            #print len(result["raw"][0])
             t = time.time()-t
             print "step %3i (%8.3fs)"%(steps,t)
             steps+=1
