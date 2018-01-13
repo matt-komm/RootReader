@@ -66,6 +66,7 @@ REGISTER_OP("RootReader")
 
 #include "TFile.h"
 #include "TTree.h"
+#include "TLeaf.h"
 
 #include <vector>
 #include <memory>
@@ -144,54 +145,48 @@ class RootReaderOp:
             public Branch<OUT>
         {
             private:
-                alignas(16) IN values_[50]; //there is some odd bug when using dynamic allocated arrays and root
                 unsigned int size_;
-                std::shared_ptr<SingleBranch<unsigned int,OUT>> length_;
-                 
+                TLeaf* leaf_;
             public:
-                ArrayBranch(const string& name, std::shared_ptr<SingleBranch<unsigned int,OUT>>& length, unsigned int size):
+                ArrayBranch(const string& name, unsigned int size):
                     Branch<OUT>(name),
-                    length_(length),
-                    size_(size)
+                    size_(size),
+                    leaf_(nullptr)
                 {
-                }
-                
-                inline const IN& value(unsigned int index) const
-                {
-                    if (index>=size_)
-                    {
-                        throw std::runtime_error("Array index out-of-range");
-                    }
-                    return values_[index];
                 }
                 
                 virtual ~ArrayBranch()
                 {
-                    //delete[] values_;
                 }
                 
-                //error codes: https://root.cern.ch/doc/master/classTTree.html#a1a48bf75621868a514741b27252cad96
                 virtual void setBranchAddress(TTree* tree)
                 {
-                    if(tree->SetBranchAddress(Branch<OUT>::name().c_str(),values_)<0)
+                    TBranch* rootBranch = tree->GetBranch(Branch<OUT>::name().c_str());
+                    if(not rootBranch)
                     {
-                        throw std::runtime_error("No branch with name '"+Branch<OUT>::name()+"' in tree");
+                        throw std::runtime_error("No branch with name '"+Branch<OUT>::name()+"' found");
+                    }
+                    if (rootBranch->GetNleaves()!=1)
+                    {
+                        throw std::runtime_error("Branch with name '"+Branch<OUT>::name()+"' contains multiple leafs");
+                    }
+                    leaf_ = dynamic_cast<TLeaf*>(rootBranch->GetListOfLeaves()->At(0));
+                    if (not leaf_)
+                    {
+                        throw std::runtime_error("Could not retrive leaf from branch with name '"+Branch<OUT>::name()+"'");
                     }
                 }
                 virtual unsigned int fillTensor(typename TTypes<OUT>::Flat& flatTensor, unsigned int index, const OUT& reset) const
                 {
-                    //std::cout<<Branch<OUT>::name()<<", length="<<length_->value()<<std::endl;
-                    for (unsigned int i = 0; i < std::min(length_->value(),size_); ++i)
+                    unsigned int leafSize = leaf_->GetLen();
+                    for (unsigned int i = 0; i < std::min(leafSize,size_); ++i)
                     {
-                        //std::cout<<(index+i)<<": "<<values_[i]<<std::endl;
-                        flatTensor(index+i)=Branch<OUT>::resetNanOrInf(values_[i],reset);
+                        flatTensor(index+i)=Branch<OUT>::resetNanOrInf(leaf_->GetValue(i),reset);
                     }
-                    for (unsigned int i = std::min(length_->value(),size_); i < size_; ++i)
+                    for (unsigned int i = std::min(leafSize,size_); i < size_; ++i)
                     {
-                        //std::cout<<(index+i)<<": padded"<<std::endl;
-                        flatTensor(index+i) = 0; //zero padding
+                        flatTensor(index+i) = reset; //padding
                     }
-                    
                     return index+size_;
                 }
         };
@@ -202,7 +197,6 @@ class RootReaderOp:
         std::unique_ptr<TFile> inputFile_;
         TTree* tree_;
         std::vector<std::shared_ptr<Branch<float>>> branches_;
-        std::unordered_map<string,std::shared_ptr<SingleBranch<unsigned int,float>>> arrayLengths_;
         size_t currentEntry_;
         
         int naninf_;
@@ -270,17 +264,10 @@ class RootReaderOp:
                     auto p2 = std::find(p1,name.end(),',');
                     auto p3 = std::find(p2,name.end(),']');
                     std::string branchName(name.begin(),p1);
-                    std::string lengthName(p1+1,p2);
                     unsigned int size = std::stol(std::string(p2+1,p3));
                     size_+=size;
-                    auto lengthBranchIt = arrayLengths_.find(lengthName);
-                    //std::cout<<"branch="<<branchName<<", length="<<lengthName<<", size="<<size<<std::endl;
-                    if (lengthBranchIt==arrayLengths_.end())
-                    {
-                        arrayLengths_[lengthName]=std::make_shared<SingleBranch<unsigned int,float>>(lengthName);
-                    }
                     branches_.emplace_back(
-                        std::make_shared<ArrayBranch<float>>(branchName,arrayLengths_[lengthName],size)
+                        std::make_shared<ArrayBranch<float>>(branchName,size)
                     );
                 }
             }
@@ -291,7 +278,6 @@ class RootReaderOp:
             mutex_lock globalLock(globalMutexForROOT_);
             //std::cout<<"final read: "<<currentEntry_<<std::endl;
             branches_.clear();
-            arrayLengths_.clear();
         }
         
         
@@ -318,19 +304,14 @@ class RootReaderOp:
                 //std::cout<<"opening file: "<<fileName<<std::endl;
                 inputFile_.reset(new TFile(fileName.c_str()));
                 currentEntry_ = 0;
-                //TODO: make treename configurable
                 tree_ = dynamic_cast<TTree*>(inputFile_->Get(treename_.c_str()));
                 if (not tree_)
                 {
-                    throw std::runtime_error("Cannot get tree 'deepntuplizer/tree' from file "+fileName);
+                    throw std::runtime_error("Cannot get tree '"+treename_+"' from file '"+fileName+"'");
                 }
                 for (auto& branch: branches_)
                 {
                     branch->setBranchAddress(tree_);
-                }
-                for (auto& branchPair: arrayLengths_)
-                {
-                    branchPair.second->setBranchAddress(tree_);
                 }
                 nEvents_ = tree_->GetEntries();
             }

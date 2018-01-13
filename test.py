@@ -19,6 +19,19 @@ fileList = fileList[:5]
 
 print fileList
 
+def makeReader(queue):
+    batch, num = rootreader_module.root_reader(queue, 
+    [
+        "jet_pt",
+        "jet_eta",
+        "sv_pt[n_sv,2]",
+        "sv_eta[n_sv,2]",
+        #"genLL_decayLength"
+    ],
+    "deepntuplizer/tree",
+    naninf=0)
+    return batch
+
 for epoch in range(1):
     print "epoch",epoch+1
     fileListQueue = tf.train.string_input_producer(fileList, num_epochs=2, shuffle=True)
@@ -29,16 +42,10 @@ for epoch in range(1):
 
     print fileListQueue.queue_ref
 
-    rootreader_op = [
-        [
-            rootreader_module.root_reader(fileListQueue.queue_ref, naninf=0, branches=[
-                "jet_pt",
-                "jet_eta",
-                "sv_pt[n_sv,2]",
-                "sv_eta[n_sv,2]",
-                #"genLL_decayLength"
-            ])
-        ] for _ in range(1)
+    rootreader_ops = [
+        
+          makeReader(fileListQueue.queue_ref)
+         for _ in range(1)
     ]
 
     batchSize = 1
@@ -47,7 +54,7 @@ for epoch in range(1):
 
     #trainingBatch = tf.train.batch_join(
     trainingBatch = tf.train.shuffle_batch_join(
-        rootreader_op, 
+        rootreader_ops, 
         batch_size=batchSize, 
         capacity=capacity,
         min_after_dequeue=minAfterDequeue,
