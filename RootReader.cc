@@ -14,9 +14,8 @@ namespace syntax_test
     static bool isArray(const string& s)
     {
         auto p1 = std::find(s.begin(),s.end(),'[');
-        auto p2 = std::find(s.begin(),s.end(),',');
-        auto p3 = std::find(s.begin(),s.end(),']');
-        return p1!=s.end() and p2!=s.end() and p3!=s.end() and p1<p2 and p2<p3;;
+        auto p2 = std::find(s.begin(),s.end(),']');
+        return p1!=s.end() and p2!=s.end() and p1<p2;
     }
 }
 
@@ -44,10 +43,9 @@ REGISTER_OP("RootReader")
             else
             {
                 auto p1 = std::find(name.begin(),name.end(),'[');
-                auto p2 = std::find(p1,name.end(),',');
-                auto p3 = std::find(p2,name.end(),']');
+                auto p2 = std::find(p1,name.end(),']');
                 
-                size += std::stol(std::string(p2+1,p3));
+                size += std::stol(std::string(p1+1,p2));
             }
         }
         //shape_inference::ShapeHandle s = c->MakeShape({c->MakeDim(branchNames.size())});
@@ -231,10 +229,9 @@ class RootReaderOp:
                 else
                 {
                     auto p1 = std::find(name.begin(),name.end(),'[');
-                    auto p2 = std::find(p1,name.end(),',');
-                    auto p3 = std::find(p2,name.end(),']');
+                    auto p2 = std::find(p1,name.end(),']');
                     std::string branchName(name.begin(),p1);
-                    unsigned int size = std::stol(std::string(p2+1,p3));
+                    unsigned int size = std::stol(std::string(p1+1,p2));
                     size_+=size;
                     tensorFillers_.emplace_back(
                         std::make_shared<TensorFillerTmpl<float>>(branchName,size)

@@ -26,13 +26,12 @@ class root_reader():
         for feature_name in sorted(self._feature_dict.keys()):
             
             feature_values = self._feature_dict[feature_name]
-            if feature_values["multiplicity"]==None:
+            if not feature_values.has_key("max"):
                 self._output_formatters[feature_name]=root_reader.slice_and_reshape(
                     index,
                     len(feature_values["branches"])
                 )
                 index+=len(feature_values["branches"])
-                #print feature_name,len(self._branch_list),len(feature_values["branches"])
                 self._branch_list.extend(feature_values["branches"])
                 
             else:
@@ -42,15 +41,9 @@ class root_reader():
                     [len(feature_values["branches"]),feature_values["max"]]
                 )
                 index+=len(feature_values["branches"])*feature_values["max"]
-                #print feature_name,len(self._branch_list),len(feature_values["branches"])*feature_values["max"]
                 for branch_name in feature_values["branches"]:
                     self._branch_list.append(
-                        branch_name+
-                        "["+
-                        feature_values["multiplicity"]+
-                        ","+
-                        str(feature_values["max"])+
-                        "]"
+                        branch_name+"["+str(feature_values["max"])+"]"
                     )
                  
                 

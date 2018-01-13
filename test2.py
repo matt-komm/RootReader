@@ -37,7 +37,6 @@ featureDict = {
             'sv_enratio',
             
         ],
-        "multiplicity":"n_sv",
         "max":4
     },
 
@@ -68,7 +67,6 @@ featureDict = {
             'isFromLLgno_isG/UInt_t',
             'isFromLLgno_isUndefined/UInt_t'
         ],
-        "multiplicity":None
     },
     "globals": {
         "branches": [
@@ -88,7 +86,6 @@ featureDict = {
             'TagVarCSV_jetNSelectedTracks', 
             'TagVarCSV_jetNTracksEtaRel'
         ],
-        "multiplicity":None
 
     },
 
@@ -113,7 +110,6 @@ featureDict = {
             'Cpfcan_chi2',
             'Cpfcan_quality'
         ],
-        "multiplicity":"n_Cpfcand",
         "max":25
     },
     "Npfcan": {
@@ -125,7 +121,6 @@ featureDict = {
             'Npfcan_drminsv',
             'Npfcan_puppiw'
         ],
-        "multiplicity":"n_Npfcand",
         "max":25
     }
 }
