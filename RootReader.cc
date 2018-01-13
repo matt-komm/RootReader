@@ -80,12 +80,12 @@ class RootReaderOp:
 
     public:
         template<typename OUT>
-        class Branch
+        class TensorFiller
         {
             protected:
                 string name_;
             public:
-                Branch(const string& name):
+                TensorFiller(const string& name):
                     name_(name)
                 {
                 }
@@ -108,80 +108,52 @@ class RootReaderOp:
                 virtual unsigned int fillTensor(typename TTypes<OUT>::Flat& flatTensor, unsigned int index, const OUT& reset) const = 0;
         };
         
-        template<typename IN, typename OUT=IN>
-        class SingleBranch:
-            public Branch<OUT>
-        {
-            private:
-                IN value_;
-            public:
-                SingleBranch(const string& name):
-                    Branch<OUT>(name)
-                {
-                }
-                
-                inline const IN& value() const
-                {
-                    return value_;
-                }
-                
-                virtual void setBranchAddress(TTree* tree)
-                {
-                    if(tree->SetBranchAddress(Branch<OUT>::name().c_str(),&value_)<0)
-                    {
-                        throw std::runtime_error("No branch with name '"+Branch<OUT>::name()+"' in tree");
-                    }
-                }
-                virtual unsigned int fillTensor(typename TTypes<OUT>::Flat& flatTensor,unsigned int index, const OUT& reset) const
-                {
-                    flatTensor(index)=Branch<OUT>::resetNanOrInf(value_,reset);
-                    //std::cout<<index<<": "<<Branch<OUT>::name()<<"="<<flatTensor(index)<<std::endl;
-                    return index+1;
-                }
-        }; 
         
         template<typename IN, typename OUT=IN>
-        class ArrayBranch:
-            public Branch<OUT>
+        class TensorFillerTmpl:
+            public TensorFiller<OUT>
         {
             private:
                 unsigned int size_;
                 TLeaf* leaf_;
             public:
-                ArrayBranch(const string& name, unsigned int size):
-                    Branch<OUT>(name),
+                typedef TensorFiller<OUT> Base;
+            
+                TensorFillerTmpl(const string& name, unsigned int size):
+                    TensorFiller<OUT>(name),
                     size_(size),
                     leaf_(nullptr)
                 {
                 }
                 
-                virtual ~ArrayBranch()
+                virtual ~TensorFillerTmpl()
                 {
                 }
                 
                 virtual void setBranchAddress(TTree* tree)
                 {
-                    TBranch* rootBranch = tree->GetBranch(Branch<OUT>::name().c_str());
+                    TBranch* rootBranch = tree->GetBranch(Base::name().c_str());
                     if(not rootBranch)
                     {
-                        throw std::runtime_error("No branch with name '"+Branch<OUT>::name()+"' found");
+                        throw std::runtime_error("No branch with name '"+Base::name()+"' found");
                     }
                     if (rootBranch->GetNleaves()!=1)
                     {
-                        throw std::runtime_error("Branch with name '"+Branch<OUT>::name()+"' contains multiple leafs");
+                        throw std::runtime_error("Branch with name '"+Base::name()+"' contains multiple leafs");
                     }
                     leaf_ = dynamic_cast<TLeaf*>(rootBranch->GetListOfLeaves()->At(0));
                     if (not leaf_)
                     {
-                        throw std::runtime_error("Could not retrive leaf from branch with name '"+Branch<OUT>::name()+"'");
+                        throw std::runtime_error("Could not retrive leaf from branch with name '"+Base::name()+"'");
                     }
                 }
+                
                 virtual unsigned int fillTensor(typename TTypes<OUT>::Flat& flatTensor, unsigned int index, const OUT& reset) const
                 {
                     unsigned int leafSize = leaf_->GetLen();
                     for (unsigned int i = 0; i < std::min(leafSize,size_); ++i)
                     {
-                        flatTensor(index+i)=Branch<OUT>::resetNanOrInf(leaf_->GetValue(i),reset);
+                        flatTensor(index+i)=Base::resetNanOrInf(leaf_->GetValue(i),reset);
                     }
                     for (unsigned int i = std::min(leafSize,size_); i < size_; ++i)
                     {
@@ -196,7 +168,7 @@ class RootReaderOp:
         mutex localMutex_; //protects class members
         std::unique_ptr<TFile> inputFile_;
         TTree* tree_;
-        std::vector<std::shared_ptr<Branch<float>>> branches_;
+        std::vector<std::shared_ptr<TensorFiller<float>>> tensorFillers_;
         size_t currentEntry_;
         
         int naninf_;
@@ -242,18 +214,16 @@ class RootReaderOp:
                     auto it = std::find(name.begin(),name.end(),'/');
                     if (it==name.end())
                     {
-                        //std::cout<<name<<" = default"<<std::endl;
-                        branches_.emplace_back(std::make_shared<SingleBranch<float>>(name));
+                        tensorFillers_.emplace_back(std::make_shared<TensorFillerTmpl<float>>(name,1));
                         size_+=1;
                     }
                     else
                     {
-                        //std::cout<<name<<" = typed"<<std::endl;
                         string type(it+1,name.end());
                         if (type=="UInt_t")
                         {
 
-                            branches_.emplace_back(std::make_shared<SingleBranch<unsigned int, float>>(string(name.begin(),it)));
+                            tensorFillers_.emplace_back(std::make_shared<TensorFillerTmpl<unsigned int, float>>(string(name.begin(),it),1));
                             size_+=1;
                         }
                     }
@@ -266,8 +236,8 @@ class RootReaderOp:
                     std::string branchName(name.begin(),p1);
                     unsigned int size = std::stol(std::string(p2+1,p3));
                     size_+=size;
-                    branches_.emplace_back(
-                        std::make_shared<ArrayBranch<float>>(branchName,size)
+                    tensorFillers_.emplace_back(
+                        std::make_shared<TensorFillerTmpl<float>>(branchName,size)
                     );
                 }
             }
@@ -276,13 +246,10 @@ class RootReaderOp:
         virtual ~RootReaderOp()
         {
             mutex_lock globalLock(globalMutexForROOT_);
-            //std::cout<<"final read: "<<currentEntry_<<std::endl;
-            branches_.clear();
+            tensorFillers_.clear();
         }
         
-        
-
-        void Compute(OpKernelContext* context)//, DoneCallback done) override
+        void Compute(OpKernelContext* context)
         {
             mutex_lock localLock(localMutex_);
            
@@ -301,7 +268,6 @@ class RootReaderOp:
                 //creating TFile/setting branch adresses is not thread safe
                 mutex_lock rootLock(globalMutexForROOT_);
                 //TODO: use TF logging and set loglevel
-                //std::cout<<"opening file: "<<fileName<<std::endl;
                 inputFile_.reset(new TFile(fileName.c_str()));
                 currentEntry_ = 0;
                 tree_ = dynamic_cast<TTree*>(inputFile_->Get(treename_.c_str()));
@@ -309,9 +275,9 @@ class RootReaderOp:
                 {
                     throw std::runtime_error("Cannot get tree '"+treename_+"' from file '"+fileName+"'");
                 }
-                for (auto& branch: branches_)
+                for (auto& tensorFiller: tensorFillers_)
                 {
-                    branch->setBranchAddress(tree_);
+                    tensorFiller->setBranchAddress(tree_);
                 }
                 nEvents_ = tree_->GetEntries();
             }
@@ -331,19 +297,17 @@ class RootReaderOp:
             auto output_flat = output_tensor->flat<float>();
             auto output_num_flat = output_num->flat<int>();
             unsigned int index = 0;
-            //std::cout<<"prepare batch ..."<<std::endl;
+            
             for (unsigned int ibatch=0; ibatch<nBatches;++ibatch)
             {
-                //std::cout<<currentEntry_<<",";
                 tree_->GetEntry(currentEntry_);
                 output_num_flat(ibatch)=currentEntry_;
-                for (auto& branch: branches_)
+                for (auto& tensorFiller: tensorFillers_)
                 {
-                    index = branch->fillTensor(output_flat,index,naninf_);
+                    index = tensorFiller->fillTensor(output_flat,index,naninf_);
                 }
                 ++currentEntry_;
             }
-            //std::cout<<std::endl;
             if (currentEntry_>=nEvents_)
             {
                 mutex_lock globalLock(globalMutexForROOT_);
@@ -357,7 +321,6 @@ class RootReaderOp:
             //mutex_lock localLock(localMutex_); //mutex here makes deadlock for some reason
             //TODO: check core/framework/reader_base.cc for details
             string work;
-            //if (queue->is_closed()) throw std::runtime_error("Closed queue");
             Notification n;
             queue->TryDequeue(
                 context, [this, context, &n, &work](const QueueInterface::Tuple& tuple) 
