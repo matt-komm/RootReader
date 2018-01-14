@@ -2,22 +2,28 @@ include(FindPackageHandleStandardArgs)
 unset(TENSORFLOW_FOUND)
 
 execute_process(
-    COMMAND python -c "import tensorflow as tf; print(tf.sysconfig.get_include())"
+    COMMAND python -c "import tensorflow as tf; print 'tf_includepath',tf.sysconfig.get_include()"
     OUTPUT_VARIABLE TF_INC
     ERROR_VARIABLE TF_INC
     RESULT_VARIABLE TF_INC_OK
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
+string(REGEX MATCH "tf_includepath (.*)" _ ${TF_INC})
+set(TF_INC ${CMAKE_MATCH_1})
 
 
 execute_process(
-    COMMAND python -c "import tensorflow as tf; print(tf.sysconfig.get_lib())"
+    COMMAND python -c "import tensorflow as tf; print 'tf_libpath',tf.sysconfig.get_lib()"
     OUTPUT_VARIABLE TF_LIB
     ERROR_VARIABLE TF_LIB
     RESULT_VARIABLE TF_LIB_OK
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
+string(REGEX MATCH "tf_libpath (.*)" _ ${TF_LIB})
+set(TF_LIB ${CMAKE_MATCH_1})
 
+message(STATUS ${TF_INC})
+message(STATUS ${TF_LIB})
 if (${TF_INC_OK} EQUAL 0 AND ${TF_LIB_OK} EQUAL 0)
     find_path(TensorFlow_INCLUDE_DIR
         NAMES tensorflow/core/framework/op.h
