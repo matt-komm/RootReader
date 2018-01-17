@@ -8,21 +8,28 @@ using namespace tensorflow;
 //TODO: somehow need to parse pt for weight evaluation!!!
 
 REGISTER_OP("ClassificationWeights")
-    .Input("in: int32")
+    .Input("labels: float32")
+    .Input("input: float32")
     .Output("out: float32")
     .Attr("rootfile: string")
     .Attr("histnames: list(string)")
+    .Attr("varindex: int")
     .SetIsStateful()
     .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) 
     {
-        int batch_dim = c->Value(c->Dim(c->input(0),0));
-        int label_length = c->Value(c->Dim(c->input(0),1));
+        tensorflow::shape_inference::ShapeHandle label_shape =  c->input(0);
+        int batch_dim = c->Value(c->Dim(label_shape,0));
+        //int label_length = c->Value(c->Dim(label_shape,1));
         std::vector<std::string> histNames;
+        
+        //std::cout<<c->Rank(label_shape)<<","<<batch_dim<<","<<label_length<<std::endl;
         TF_RETURN_IF_ERROR(c->GetAttr("histnames",&histNames));
+        /*
         if (label_length!=histNames.size())
         {
-            throw std::runtime_error("Labels need to be of same size as tensor");
+            throw std::runtime_error("Labels ("+std::to_string(histNames.size())+") need to be of same size as tensor ("+std::to_string(label_length)+")");
         }
+        */
         shape_inference::ShapeHandle s = c->MakeShape({batch_dim});
         c->set_output(0,s);
         return Status::OK();
@@ -45,6 +52,7 @@ class ClassificationWeightsOp:
         std::vector<std::string> histNames;
         bool transpose_;
         std::vector<TH1F> hists;
+        int varIndex;
     public:
         explicit ClassificationWeightsOp(OpKernelConstruction* context): 
             OpKernel(context)
@@ -56,6 +64,10 @@ class ClassificationWeightsOp:
             OP_REQUIRES_OK(
                 context,
                 context->GetAttr("histnames",&histNames)
+            );
+            OP_REQUIRES_OK(
+                context,
+                context->GetAttr("varindex",&varIndex)
             );
             TFile rootFile(filePath.c_str());
             if (not rootFile.IsOpen ())
@@ -78,30 +90,54 @@ class ClassificationWeightsOp:
         virtual ~ClassificationWeightsOp()
         { 
         }
+        
+        float computeWeight(int classIndex, float value)
+        {
+            TH1& hist = hists[classIndex];
+            int bin = hist.FindBin(value);
+            if (bin==0 or bin>=hist.GetNbinsX()+1)
+            {
+                return 0;
+            }
+            return hist.GetBinContent(bin);
+        }
 
         void Compute(OpKernelContext* context)
         {
-            const Tensor& input_tensor = context->input(0);
-            auto input = input_tensor.flat<int>();
-            long num_batches = input_tensor.dim_size(0);
-            long label_length = input_tensor.dim_size(1);
+            const Tensor& label_tensor = context->input(0);
+            auto label = label_tensor.flat<float>();
+            long num_batches = label_tensor.dim_size(0);
+            long label_length = label_tensor.dim_size(1);
+            if (label_length!=hists.size())
+            {
+                throw std::runtime_error("Labels ("+std::to_string(hists.size())+") need to be of same size as tensor ("+std::to_string(label_length)+")");
+            }
+
+            const Tensor& value_tensor = context->input(1);
+            auto value = value_tensor.flat<float>();
+            long value_size = value_tensor.dim_size(1);
 
             Tensor* output_tensor = nullptr;
             TensorShape shape;
             shape.AddDim(num_batches);
-            shape.AddDim(label_length);
             OP_REQUIRES_OK(context, context->allocate_output("out", shape,&output_tensor));
             auto output = output_tensor->flat<float>();
 
             for (unsigned int ibatch = 0; ibatch < num_batches; ++ibatch)
             {
-                int label_index = 0;
+                int class_index = -1;
                 for (unsigned int i = 0; i < label_length; ++i)
                 { 
-                    label_index = input(ibatch*label_length+i);
-                    if (label_index>0) break;
+                    if (label(ibatch*label_length+i)>0.5)
+                    {
+                        class_index = i;
+                        break;
+                    }
                 }
+                if (class_index<0) throw std::runtime_error("labels tensor needs to be one-hot encoded");
+                float varValue = value(ibatch*value_size+varIndex);
                 
+                output(ibatch) = computeWeight(class_index,varValue);
             }
         }  
 };

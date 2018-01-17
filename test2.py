@@ -3,12 +3,15 @@ import os
 import time
 import ROOT
 import sys
+import numpy
 from root_reader import root_reader
+
+classificationweights_module = tf.load_op_library('./libClassificationWeights.so')
 
 fileList = []
 
 filePath = "/media/matthias/HDD/matthias/Analysis/LLP/training/samples/rootFiles.raw.txt"
-#filePath = "/vols/cms/mkomm/LLP/samples/rootFiles.txt"
+#filePath = "/vols/cms/mkomm/LLP/samples/rootFiles_stripped2.txt"
 
 f = open(filePath)
 for l in f:
@@ -135,14 +138,15 @@ chain = ROOT.TChain("deepntuplizer/tree")
 for f in fileList:
     chain.AddFile(f)
 
-targetShape = ROOT.TH1F("ptTarget","",20,1,3.4)
+binning = numpy.logspace(1.5,3,num=20)
+targetShape = ROOT.TH1F("ptTarget","",len(binning)-1,binning)
 for label in featureDict["truth"]["branches"]:
     branchName = label.split("/")[0]
     print "projecting ... ",branchName
-    hist = ROOT.TH1F("pt"+branchName,"",20,1,3.4)
+    hist = ROOT.TH1F("pt"+branchName,"",len(binning)-1,binning)
     hist.Sumw2()
     #hist.SetDirectory(0)
-    chain.Project(hist.GetName(),"TMath::Log10(jet_pt)","("+branchName+"==1)")
+    chain.Project(hist.GetName(),"jet_pt","("+branchName+"==1)")
     if hist.Integral()>0:
         hist.Scale(1./hist.Integral())
     else:
@@ -155,19 +159,21 @@ for label in featureDict["truth"]["branches"]:
     
     histsPerClass[branchName]=hist
 targetShape.Scale(1./targetShape.Integral())
+
 for label in histsPerClass.keys():
     hist = histsPerClass[label]
     if (hist.Integral()>0):
-        weight = targetShape.Clone("weight"+label)
-        weight.Scale(0.1) #can use arbitrary scale here to make weight more reasonable
+        weight = targetShape.Clone("weight_"+label)
+        weight.Scale(1) #can use arbitrary scale here to make weight more reasonable
         weight.Divide(hist)
         weightsPerClass[label]=weight
     else:
         weightsPerClass[label]=hist
 
 cv = ROOT.TCanvas("cv","",800,600)
+cv.SetLogx(1)
 ymax = max(map(lambda h: h.GetMaximum(),histsPerClass.values()))
-axis = ROOT.TH2F("axis",";log10(pt);",20,1,3.4,50,0,ymax*1.1)
+axis = ROOT.TH2F("axis",";pt;",50,binning[0],binning[-1],50,0,ymax*1.1)
 axis.Draw("AXIS")
 targetShape.SetLineWidth(3)
 targetShape.SetLineColor(ROOT.kRed)
@@ -177,31 +183,32 @@ for label in histsPerClass.keys():
 cv.Update()
 cv.Print("pt.pdf")
 
-
-
-for label in histsPerClass.keys():
-    cvWeight = ROOT.TCanvas("cv2","",800,600)
-    cvWeight.SetLogy(1)
-    axisvWeight = ROOT.TH2F("axis",";log10(pt);",20,1,3.4,50,0.01,100)
-    axisvWeight.Draw("AXIS")
+weightFile = ROOT.TFile("weights.root","RECREATE")
+cvWeight = ROOT.TCanvas("cv2","",800,600)
+cvWeight.SetLogy(1)
+cvWeight.SetLogx(1)
+axisvWeight = ROOT.TH2F("axis2",";pt;",50,binning[0],binning[-1],50,0.1,150)
+axisvWeight.Draw("AXIS")
+histNames = []
+for label in weightsPerClass.keys():
     weightsPerClass[label].Draw("SameHISTL")
-    fitFct = ROOT.TF1("fit"+label,"pol5",0,4)
-    weightsPerClass[label].Fit(fitFct)
-    fitFct.Draw("SameL")
-    cvWeight.Update()
-    cvWeight.Print("pt_weight_"+label+".pdf")
+    weightsPerClass[label].Write()
+    histNames.append(weightsPerClass[label].GetName())
     
-sys.exit(1)
+cvWeight.Update()
+cvWeight.Print("pt_weight.pdf")
+weightFile.Close()
+
 
 for epoch in range(1):
     print "epoch",epoch+1
-    fileListQueue = tf.train.string_input_producer(fileList, num_epochs=1, shuffle=False)
+    fileListQueue = tf.train.string_input_producer(fileList, num_epochs=1, shuffle=True)
 
     rootreader_op = [
-        root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=100).batch() for _ in range(1)
+        root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=100).batch() for _ in range(4)
     ]
     
-    batchSize = 2
+    batchSize = 10
     minAfterDequeue = batchSize*2
     capacity = minAfterDequeue + 3 * batchSize
     
@@ -217,21 +224,15 @@ for epoch in range(1):
     )
     #trainingBatch["num"]=tf.sign(tf.mod(trainingBatch["num"],tf.constant(10,shape=trainingBatch["num"].get_shape())))
     print trainingBatch
-    '''
-    weights = tf.constant([0.1,0.7],shape=[batchSize],dtype=tf.float32)
-    print weights
-    trainingBatchSampled,resampleRate = tf.contrib.training.weighted_resample(
-        [
-            trainingBatch["num"],
-            trainingBatch["truth"]
-        ],
-        weights,
-        1
+    print "labels",len(histNames)
+    weights = classificationweights_module.classification_weights(
+        trainingBatch["truth"],
+        trainingBatch["globals"],
+        "weights.root",
+        histNames,
+        0
     )
-    trainingBatchSampledDict = {}
-    trainingBatchSampledDict["num"]=trainingBatchSampled[0]
-    trainingBatchSampledDict["truth"]=tf.argmax(trainingBatchSampled[1],axis=1)
-    '''
+    print weights
 
     init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer()) 
     
@@ -247,18 +248,24 @@ for epoch in range(1):
         sess.run(trainingBatch)
 
     '''
+    jet_pt = tf.map_fn(lambda x: x[0], trainingBatch["globals"])
+    
+    
     steps = 1
     try:
         while(True):
             t = time.time()
-            result = sess.run([trainingBatch])
+            result = sess.run([trainingBatch,jet_pt,weights,tf.argmax(trainingBatch["truth"],axis=1)])
             t = time.time()-t
-            print "-- step %3i (%8.3fs) --"%(steps,t)
-            print result
-            print 
+            if steps%1==0:
+                print "-- step %3i (%8.3fs) --"%(steps,t)
+                for i in range(len(result[1])):
+                    print "%33s:  pt=%6.1f  w=%6.2e"%(histNames[result[3][i]],result[1][i],result[2][i])#,result[0]["globals"][i][0]
+                print 
             steps+=1
-            if steps>10:
+            if steps>20:
                 break
+            
             #print sess.run(dequeue_op)
     except tf.errors.OutOfRangeError:
         print "done"
