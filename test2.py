@@ -151,6 +151,7 @@ for epoch in range(1):
         min_after_dequeue=minAfterDequeue,
         enqueue_many=True #requires to read examples in batches!
     )
+    #trainingBatch["num"]=tf.sign(tf.mod(trainingBatch["num"],tf.constant(10,shape=trainingBatch["num"].get_shape())))
     
     sess = tf.Session()
     sess.run(init_op)

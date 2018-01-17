@@ -47,7 +47,7 @@ class root_reader():
                     )
                  
                 
-        self._op, self._num = rootreader_module.root_reader(
+        self._op_batch, self._op_num = rootreader_module.root_reader(
             queue.queue_ref, 
             self._branch_list,
             treename=treename,
@@ -56,13 +56,13 @@ class root_reader():
         )
         
     def raw(self):
-        return {"raw":self._op,"num":self._num}
+        return {"raw":self._op_batch,"num":self._op_num}
         
     def batch(self):
         result = {}
         for featureName in sorted(self._output_formatters.keys()):
-            result[featureName]=self._output_formatters[featureName](self._op)
-        result["num"] = self._num
+            result[featureName]=self._output_formatters[featureName](self._op_batch)
+        result["num"] = self._op_num
         return result
         
             

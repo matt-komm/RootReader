@@ -21,7 +21,7 @@ except ImportError:
 
 
 fileListTrain = []
-filePathTrain = "/vols/cms/mkomm/LLP/samples/rootFiles_stripped2.txt"
+filePathTrain = "/media/matthias/HDD/matthias/Analysis/LLP/training/samples/rootFiles.raw.txt"
 f = open(filePathTrain)
 for l in f:
     absPath = os.path.join(filePathTrain.rsplit('/',1)[0],l.replace("\n","").replace("\r","")+"")
@@ -29,6 +29,9 @@ for l in f:
 f.close()
 print "files train ",len(fileListTrain)
 
+targetCategory
+for f in fileListTrain:
+    
 
 #fileListTrain = fileListTrain[:6]
 
@@ -52,7 +55,6 @@ featureDict = {
             'sv_enratio',
             
         ],
-        "multiplicity":"n_sv",
         "max":4
     },
 
@@ -83,14 +85,14 @@ featureDict = {
             'isFromLLgno_isG/UInt_t',
             'isFromLLgno_isUndefined/UInt_t'
         ],
-        "multiplicity":None
     },
+    
     "gen": {
         "branches":[
             'genLL_decayLength'
         ],
-        "multiplicity":None
     },
+    
     "global": {
         "branches": [
             'jet_pt',
@@ -109,7 +111,6 @@ featureDict = {
             'TagVarCSV_jetNSelectedTracks', 
             'TagVarCSV_jetNTracksEtaRel'
         ],
-        "multiplicity":None
 
     },
 
@@ -134,7 +135,6 @@ featureDict = {
             'Cpfcan_chi2',
             'Cpfcan_quality'
         ],
-        "multiplicity":"n_Cpfcand",
         "max":25
     },
     "Npfcan": {
@@ -146,7 +146,6 @@ featureDict = {
             'Npfcan_drminsv',
             'Npfcan_puppiw'
         ],
-        "multiplicity":"n_Npfcand",
         "max":25
     }
 }
