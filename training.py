@@ -2,6 +2,8 @@ import tensorflow as tf
 import keras
 from keras import backend as K
 import os
+import numpy
+import ROOT
 import time
 from root_reader import root_reader
 
@@ -10,6 +12,8 @@ from keras.layers.pooling import MaxPooling2D
 from keras.layers.normalization import BatchNormalization
 
 from deepFlavour import model_deepFlavourReference
+
+classificationweights_module = tf.load_op_library('./libClassificationWeights.so')
 
 import imp
 try:
@@ -92,7 +96,7 @@ featureDict = {
         ],
     },
     
-    "global": {
+    "globals": {
         "branches": [
             'jet_pt',
             'jet_eta',
@@ -149,6 +153,76 @@ featureDict = {
     }
 }
 
+
+
+histsPerClass = {}
+weightsPerClass = {}
+chain = ROOT.TChain("deepntuplizer/tree")
+for f in fileListTrain:
+    chain.AddFile(f)
+
+binning = numpy.logspace(1.5,3,num=20)
+targetShape = ROOT.TH1F("ptTarget","",len(binning)-1,binning)
+for label in featureDict["truth"]["branches"]:
+    branchName = label.split("/")[0]
+    print "projecting ... ",branchName
+    hist = ROOT.TH1F("pt"+branchName,"",len(binning)-1,binning)
+    hist.Sumw2()
+    #hist.SetDirectory(0)
+    chain.Project(hist.GetName(),"jet_pt","("+branchName+"==1)")
+    if hist.Integral()>0:
+        hist.Scale(1./hist.Integral())
+    else:
+        print "no entries found for class: ",branchName
+        
+    if branchName.find("isFromLLgno")==0:
+        targetShape.Add(hist,0.1) #lower impact of LLP
+    if branchName.find("isB")==0 or branchName.find("isBB")==0:
+        targetShape.Add(hist)
+    
+    histsPerClass[branchName]=hist
+targetShape.Scale(1./targetShape.Integral())
+
+for label in histsPerClass.keys():
+    hist = histsPerClass[label]
+    if (hist.Integral()>0):
+        weight = targetShape.Clone("weight_"+label)
+        weight.Scale(1) #can use arbitrary scale here to make weight more reasonable
+        weight.Divide(hist)
+        weightsPerClass[label]=weight
+    else:
+        weightsPerClass[label]=hist
+
+cv = ROOT.TCanvas("cv","",800,600)
+cv.SetLogx(1)
+ymax = max(map(lambda h: h.GetMaximum(),histsPerClass.values()))
+axis = ROOT.TH2F("axis",";pt;",50,binning[0],binning[-1],50,0,ymax*1.1)
+axis.Draw("AXIS")
+targetShape.SetLineWidth(3)
+targetShape.SetLineColor(ROOT.kRed)
+targetShape.Draw("SameHISTL")
+for label in histsPerClass.keys():
+    histsPerClass[label].Draw("SameHISTL")
+cv.Update()
+cv.Print("pt.pdf")
+
+weightFile = ROOT.TFile("weights.root","RECREATE")
+cvWeight = ROOT.TCanvas("cv2","",800,600)
+cvWeight.SetLogy(1)
+cvWeight.SetLogx(1)
+axisvWeight = ROOT.TH2F("axis2",";pt;",50,binning[0],binning[-1],50,0.1,150)
+axisvWeight.Draw("AXIS")
+histNames = []
+for label in weightsPerClass.keys():
+    weightsPerClass[label].Draw("SameHISTL")
+    weightsPerClass[label].Write()
+    histNames.append(weightsPerClass[label].GetName())
+    
+cvWeight.Update()
+cvWeight.Print("pt_weight.pdf")
+weightFile.Close()
+
+
 for epoch in range(40):
     epoch_duration = time.time()
     print "epoch",epoch+1
@@ -174,20 +248,31 @@ for epoch in range(40):
         enqueue_many=True #requires to read examples in batches!
     )
 
-    globalvars = keras.layers.Input(tensor=trainingBatch['global'])
+    globalvars = keras.layers.Input(tensor=trainingBatch['globals'])
     cpf = keras.layers.Input(tensor=trainingBatch['Cpfcan'])
     npf = keras.layers.Input(tensor=trainingBatch['Npfcan'])
     vtx = keras.layers.Input(tensor=trainingBatch['sv'])
     #gen = keras.layers.Input(tensor=trainingBatch['gen'])
     truth = trainingBatch["truth"]
     #dequeueBatch = trainingBatch['Npfcan'].dequeue()
+    
+    weights = classificationweights_module.classification_weights(
+        trainingBatch["truth"],
+        trainingBatch["globals"],
+        "weights.root",
+        histNames,
+        0
+    )
 
     nclasses = truth.shape.as_list()[1]
     inputs = [globalvars,cpf,npf,vtx]
     prediction = model_deepFlavourReference(inputs,nclasses,1,dropoutRate=0.1,momentum=0.6)
-    loss = tf.reduce_mean(keras.losses.categorical_crossentropy(truth, prediction))
+    loss = tf.reduce_mean(tf.multiply(keras.losses.categorical_crossentropy(truth, prediction),weights))
+    loss_old = tf.reduce_mean(keras.losses.categorical_crossentropy(truth, prediction))
     accuracy,accuracy_op = tf.metrics.accuracy(tf.argmax(truth,1),tf.argmax(prediction,1))
     model = keras.Model(inputs=inputs, outputs=prediction)
+    
+    
     
     #model.add_loss(loss)
     #model.compile(optimizer='rmsprop', loss=None)
@@ -229,13 +314,13 @@ for epoch in range(40):
             step += 1
             start_time = time.time()
 
-            _, loss_value, accuracy_value = sess.run([train_op, loss,accuracy_op], feed_dict={K.learning_phase(): 0}) #pass 1 for training, 0 for testing
+            _, loss_value, loss_old_value, accuracy_value = sess.run([train_op, loss,loss_old,accuracy_op], feed_dict={K.learning_phase(): 1}) #pass 1 for training, 0 for testing
             total_loss+=loss_value
             #data = sess.run(trainingBatch)
             #print data
             duration = time.time() - start_time
-            if step % 10 == 0:
-                print 'Step %d: loss = %.2f, accuracy = %.1f%% (%.3f sec)' % (step, loss_value,accuracy_value*100.,duration)
+            if step % 1 == 0:
+                print 'Step %d: loss = %.2f (%.2f), accuracy = %.1f%% (%.3f sec)' % (step, loss_value,loss_old_value,accuracy_value*100.,duration)
     except tf.errors.OutOfRangeError:
         print('Done training for %d steps.' % (step))
     model.save_weights("model_epoch"+str(epoch)+".hdf5")
