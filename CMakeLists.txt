@@ -29,6 +29,12 @@ add_library(RootWriter
 )
 target_link_libraries(RootWriter ${TensorFlow_LIBRARY} ${ROOT_LIBRARIES})
 
+add_library(ClassificationWeights
+    MODULE
+    ClassificationWeights.cc
+)
+target_link_libraries(ClassificationWeights ${TensorFlow_LIBRARY} ${ROOT_LIBRARIES})
+
 
 add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0 -std=c++11)
 

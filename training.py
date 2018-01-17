@@ -29,8 +29,7 @@ for l in f:
 f.close()
 print "files train ",len(fileListTrain)
 
-targetCategory
-for f in fileListTrain:
+
     
 
 #fileListTrain = fileListTrain[:6]
