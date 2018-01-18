@@ -8,6 +8,7 @@ import time
 import math
 import sys
 from root_reader import root_reader
+from train_test_splitter import train_test_splitter
 
 cvscale = 1.0
 
@@ -207,13 +208,15 @@ from deepFlavour import model_deepFlavourReference
 
 classificationweights_module = tf.load_op_library('./libClassificationWeights.so')
 
+'''
+DO NOT USE THIS SINCE SGE SETS IT ALREADY
 import imp
 try:
     imp.find_module('setGPU')
     import setGPU
 except ImportError:
     pass
-
+'''
 
 
 fileListTrain = []
@@ -482,14 +485,54 @@ cvWeight.Update()
 cvWeight.Print("pt_weight.pdf")
 #cvWeight.Print("pt_weight.png")
 weightFile.Close()
-sys.exit(1)
+#sys.exit(1)
+
+def setupModel(batch):
+    result = {}
+    globalvars = keras.layers.Input(tensor=batch['globals'])
+    cpf = keras.layers.Input(tensor=batch['Cpfcan'])
+    npf = keras.layers.Input(tensor=batch['Npfcan'])
+    vtx = keras.layers.Input(tensor=batch['sv'])
+    truth = batch["truth"]
+
+    weights = classificationweights_module.classification_weights(
+        batch["truth"],
+        batch["globals"],
+        "weights.root",
+        histNames,
+        0
+    )
+    result["weights"]=weights
+
+    nclasses = truth.shape.as_list()[1]
+    inputs = [globalvars,cpf,npf,vtx]
+    prediction = model_deepFlavourReference(
+        inputs,
+        nclasses,
+        1,
+        dropoutRate=0.1,
+        momentum=0.6,
+        batchnorm=False,
+        lstm=False
+    )
+    result["prediction"] = prediction
+    cross_entropy = keras.losses.categorical_crossentropy(truth, prediction)
+    weighted_loss = tf.reduce_mean(tf.multiply(cross_entropy,weights))
+    result["weighted_loss"] = weighted_loss
+    unweighted_loss = tf.reduce_mean(cross_entropy)
+    result["unweighted_loss"] = unweighted_loss
+    accuracy,accuracy_op = tf.metrics.accuracy(tf.argmax(truth,1),tf.argmax(prediction,1))
+    result["accuracy"] = accuracy_op
+    model = keras.Model(inputs=inputs, outputs=prediction)
+    result["model"] = model
+    
+    return result
 
 for epoch in range(60):
     epoch_duration = time.time()
     print "epoch",epoch+1
     fileListQueue = tf.train.string_input_producer(fileListTrain, num_epochs=1, shuffle=True)
 
-    #TODO: split 10% off inside root_reader for online testing
     rootreader_op = [
         root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=100).batch() for _ in range(6)
     ]
@@ -501,37 +544,24 @@ for epoch in range(60):
     #check: tf.contrib.training.stratified_sample
     #for online resampling for equal pt/eta weights
     #trainingBatch = tf.train.batch_join(
-    trainingBatch = tf.train.shuffle_batch_join(
+    batch = tf.train.shuffle_batch_join(
         rootreader_op, 
         batch_size=batchSize, 
         capacity=capacity,
         min_after_dequeue=minAfterDequeue,
         enqueue_many=True #requires to read examples in batches!
     )
-
-    globalvars = keras.layers.Input(tensor=trainingBatch['globals'])
-    cpf = keras.layers.Input(tensor=trainingBatch['Cpfcan'])
-    npf = keras.layers.Input(tensor=trainingBatch['Npfcan'])
-    vtx = keras.layers.Input(tensor=trainingBatch['sv'])
-    #gen = keras.layers.Input(tensor=trainingBatch['gen'])
-    truth = trainingBatch["truth"]
-    #dequeueBatch = trainingBatch['Npfcan'].dequeue()
-    
-    weights = classificationweights_module.classification_weights(
-        trainingBatch["truth"],
-        trainingBatch["globals"],
-        "weights.root",
-        histNames,
-        0
+    train_test_split = train_test_splitter(
+        batch["num"],
+        batch,
+        percentage=10
     )
+    train_batch = train_test_split.train()
+    test_batch = train_test_split.test()
 
-    nclasses = truth.shape.as_list()[1]
-    inputs = [globalvars,cpf,npf,vtx]
-    prediction = model_deepFlavourReference(inputs,nclasses,1,dropoutRate=0.1,momentum=0.6)
-    loss = tf.reduce_mean(tf.multiply(keras.losses.categorical_crossentropy(truth, prediction),weights))
-    loss_old = tf.reduce_mean(keras.losses.categorical_crossentropy(truth, prediction))
-    accuracy,accuracy_op = tf.metrics.accuracy(tf.argmax(truth,1),tf.argmax(prediction,1))
-    model = keras.Model(inputs=inputs, outputs=prediction)
+    model_train = setupModel(train_batch)
+    model_test = setupModel(test_batch)
+
     
     
     
@@ -540,14 +570,14 @@ for epoch in range(60):
     #model.summary()
     #train_op = tf.train.GradientDescentOptimizer(0.01).minimize(loss)
     train_op = tf.train.AdamOptimizer(
-        learning_rate=0.000001,
+        learning_rate=0.001,
         beta1=0.9,
         beta2=0.999,
         epsilon=1e-08,
         use_locking=True,
         name='Adam'
     ).minimize(
-        loss
+        model_train["weighted_loss"]
     )
 
 
@@ -560,35 +590,46 @@ for epoch in range(60):
 
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-    total_loss = 0
+    
     
     if os.path.exists("model_epoch"+str(epoch-1)+".hdf5"):
         print "loading weights ... model_epoch"+str(epoch-1)+".hdf5"
-        model.load_weights("model_epoch"+str(epoch-1)+".hdf5") #use after init_op which initializes random weights!!!
+        #use after init_op which initializes random weights!!!
+        model_train["model"].load_weights("model_epoch"+str(epoch-1)+".hdf5")
+        
     elif epoch>0:
         print "no weights from previous epoch found"
         sys.exit(1)
         
+        
+    total_loss_train = 0
+    total_loss_test = 0
     try:
         step = 0
         while not coord.should_stop():
             step += 1
             start_time = time.time()
-            #loss_value, loss_old_value, accuracy_value = sess.run([loss,loss_old,accuracy_op], feed_dict={K.learning_phase(): 1}) #pass 1 for training, 0 for testing
-            _, loss_value, loss_old_value, accuracy_value = sess.run([train_op, loss,loss_old,accuracy_op], feed_dict={K.learning_phase(): 1}) #pass 1 for training, 0 for testing
-            total_loss+=loss_value
-            #data = sess.run(trainingBatch)
-            #print data
+            #assuming loss is calculated before weights are updated
+            model_test["model"].set_weights(model_train["model"].get_weights()) 
+            _, loss_train,loss_test, accuracy_train,accuracy_test = sess.run([
+                    train_op, 
+                    model_train["weighted_loss"],model_test["weighted_loss"],
+                    model_train["accuracy"],model_test["accuracy"]
+                ], 
+                    feed_dict={K.learning_phase(): 1}
+            )
+            total_loss_train+=loss_train
+            total_loss_test+=loss_test
             duration = time.time() - start_time
             if step % 10 == 0:
-                print 'Step %d: loss = %.2f (%.2f), accuracy = %.1f%% (%.3f sec)' % (step, loss_value,loss_old_value,accuracy_value*100.,duration)
+                print 'Step %d: loss = %.2f (%.2f), accuracy = %.1f%% (%.1f%%), time = %.3f sec' % (step, loss_train,loss_test,accuracy_train*100.,accuracy_test*100.,duration)
     except tf.errors.OutOfRangeError:
         print('Done training for %d steps.' % (step))
-    model.save_weights("model_epoch"+str(epoch)+".hdf5")
+    model_train["model"].save_weights("model_epoch"+str(epoch)+".hdf5")
     print "Epoch duration = (%.1f min)"%((time.time()-epoch_duration)/60.)
-    print "Average loss = ",(total_loss/step)
+    print "Average loss = %.2f (%.2f)"%(total_loss_train/step,total_loss_test/step)
     f = open("model_epoch.stat","a")
-    f.write(str(epoch)+";"+str(total_loss/step)+";"+str(accuracy_value*100.)+"\n")
+    f.write(str(epoch)+";"+str(total_loss_train/step)+";"+str(total_loss_test/step)+";"+str(accuracy_train*100.)+";"+str(accuracy_test*100.)+"\n")
     f.close()
     coord.request_stop()
     coord.join(threads)

@@ -118,7 +118,6 @@ class TrainTestSplittingOp:
                     train_batch_length++;
                 }
             }
-            std::cout<<"train size: "<<train_batch_length<<", test size: "<<test_batch_length<<std::endl;
             
             Tensor* train_output_tensor = nullptr;
             TensorShape train_output_shape = data_tensor.shape();
