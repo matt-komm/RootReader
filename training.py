@@ -5,7 +5,199 @@ import os
 import numpy
 import ROOT
 import time
+import math
+import sys
 from root_reader import root_reader
+
+cvscale = 1.0
+
+fontScale = 750./650.
+
+ROOT.gROOT.Reset()
+ROOT.gROOT.SetBatch(True)
+ROOT.gStyle.SetOptStat(0)
+ROOT.gStyle.SetOptFit(0)
+ROOT.gROOT.Reset()
+ROOT.gROOT.SetStyle("Plain")
+ROOT.gStyle.SetOptStat(0)
+ROOT.gStyle.SetOptFit(1111)
+ROOT.gStyle.SetPadTopMargin(0.08)
+ROOT.gStyle.SetPadLeftMargin(0.145)
+ROOT.gStyle.SetPadRightMargin(0.26)
+ROOT.gStyle.SetPadBottomMargin(0.15)
+ROOT.gStyle.SetStatFontSize(0.025)
+
+ROOT.gStyle.SetOptFit()
+ROOT.gStyle.SetOptStat(0)
+
+# For the canvas:
+ROOT.gStyle.SetCanvasBorderMode(0)
+ROOT.gStyle.SetCanvasColor(ROOT.kWhite)
+ROOT.gStyle.SetCanvasDefH(700) #Height of canvas
+ROOT.gStyle.SetCanvasDefW(800) #Width of canvas
+ROOT.gStyle.SetCanvasDefX(0)   #POsition on screen
+ROOT.gStyle.SetCanvasDefY(0)
+
+# For the Pad:
+ROOT.gStyle.SetPadBorderMode(0)
+# ROOT.gStyle.SetPadBorderSize(Width_t size = 1)
+ROOT.gStyle.SetPadColor(ROOT.kWhite)
+#ROOT.gStyle.SetPadGridX(True)
+#ROOT.gStyle.SetPadGridY(True)
+ROOT.gStyle.SetGridColor(ROOT.kBlack)
+ROOT.gStyle.SetGridStyle(2)
+ROOT.gStyle.SetGridWidth(1)
+
+# For the frame:
+
+ROOT.gStyle.SetFrameBorderMode(0)
+ROOT.gStyle.SetFrameBorderSize(0)
+ROOT.gStyle.SetFrameFillColor(0)
+ROOT.gStyle.SetFrameFillStyle(0)
+ROOT.gStyle.SetFrameLineColor(1)
+ROOT.gStyle.SetFrameLineStyle(1)
+ROOT.gStyle.SetFrameLineWidth(0)
+
+# For the histo:
+# ROOT.gStyle.SetHistFillColor(1)
+# ROOT.gStyle.SetHistFillStyle(0)
+# ROOT.gStyle.SetLegoInnerR(Float_t rad = 0.5)
+# ROOT.gStyle.SetNumberContours(Int_t number = 20)
+
+ROOT.gStyle.SetEndErrorSize(2)
+#ROOT.gStyle.SetErrorMarker(20)
+ROOT.gStyle.SetErrorX(0.)
+
+ROOT.gStyle.SetMarkerStyle(20)
+#ROOT.gStyle.SetMarkerStyle(20)
+
+#For the fit/function:
+ROOT.gStyle.SetOptFit(1)
+ROOT.gStyle.SetFitFormat("5.4g")
+ROOT.gStyle.SetFuncColor(2)
+ROOT.gStyle.SetFuncStyle(1)
+ROOT.gStyle.SetFuncWidth(1)
+
+#For the date:
+ROOT.gStyle.SetOptDate(0)
+# ROOT.gStyle.SetDateX(Float_t x = 0.01)
+# ROOT.gStyle.SetDateY(Float_t y = 0.01)
+
+# For the statistics box:
+ROOT.gStyle.SetOptFile(0)
+ROOT.gStyle.SetOptStat(0) # To display the mean and RMS:   SetOptStat("mr")
+ROOT.gStyle.SetStatColor(ROOT.kWhite)
+ROOT.gStyle.SetStatFont(42)
+ROOT.gStyle.SetStatFontSize(0.025)
+ROOT.gStyle.SetStatTextColor(1)
+ROOT.gStyle.SetStatFormat("6.4g")
+ROOT.gStyle.SetStatBorderSize(1)
+ROOT.gStyle.SetStatH(0.1)
+ROOT.gStyle.SetStatW(0.15)
+
+ROOT.gStyle.SetHatchesSpacing(1.3/math.sqrt(cvscale))
+ROOT.gStyle.SetHatchesLineWidth(int(2*cvscale))
+
+# ROOT.gStyle.SetStaROOT.TStyle(Style_t style = 1001)
+# ROOT.gStyle.SetStatX(Float_t x = 0)
+# ROOT.gStyle.SetStatY(Float_t y = 0)
+
+
+#ROOT.gROOT.ForceStyle(True)
+#end modified
+
+# For the Global title:
+
+ROOT.gStyle.SetOptTitle(0)
+
+# ROOT.gStyle.SetTitleH(0) # Set the height of the title box
+# ROOT.gStyle.SetTitleW(0) # Set the width of the title box
+#ROOT.gStyle.SetTitleX(0.35) # Set the position of the title box
+#ROOT.gStyle.SetTitleY(0.986) # Set the position of the title box
+# ROOT.gStyle.SetTitleStyle(Style_t style = 1001)
+#ROOT.gStyle.SetTitleBorderSize(0)
+
+# For the axis titles:
+ROOT.gStyle.SetTitleColor(1, "XYZ")
+ROOT.gStyle.SetTitleFont(43, "XYZ")
+ROOT.gStyle.SetTitleSize(35*cvscale*fontScale, "XYZ")
+# ROOT.gStyle.SetTitleXSize(Float_t size = 0.02) # Another way to set the size?
+# ROOT.gStyle.SetTitleYSize(Float_t size = 0.02)
+ROOT.gStyle.SetTitleXOffset(1.2)
+#ROOT.gStyle.SetTitleYOffset(1.2)
+ROOT.gStyle.SetTitleOffset(1.2, "YZ") # Another way to set the Offset
+
+# For the axis labels:
+
+ROOT.gStyle.SetLabelColor(1, "XYZ")
+ROOT.gStyle.SetLabelFont(43, "XYZ")
+ROOT.gStyle.SetLabelOffset(0.0077, "XYZ")
+ROOT.gStyle.SetLabelSize(32*cvscale*fontScale, "XYZ")
+#ROOT.gStyle.SetLabelSize(0.04, "XYZ")
+
+# For the axis:
+
+ROOT.gStyle.SetAxisColor(1, "XYZ")
+ROOT.gStyle.SetAxisColor(1, "XYZ")
+ROOT.gStyle.SetStripDecimals(True)
+ROOT.gStyle.SetTickLength(0.03, "Y")
+ROOT.gStyle.SetTickLength(0.05, "X")
+ROOT.gStyle.SetNdivisions(1005, "X")
+ROOT.gStyle.SetNdivisions(506, "Y")
+
+ROOT.gStyle.SetPadTickX(1)  # To get tick marks on the opposite side of the frame
+ROOT.gStyle.SetPadTickY(1)
+
+# Change for log plots:
+ROOT.gStyle.SetOptLogx(0)
+ROOT.gStyle.SetOptLogy(0)
+ROOT.gStyle.SetOptLogz(0)
+
+#ROOT.gStyle.SetPalette(1) #(1,0)
+
+# another top group addition
+
+# Postscript options:
+#ROOT.gStyle.SetPaperSize(20., 20.)
+#ROOT.gStyle.SetPaperSize(ROOT.TStyle.kA4)
+#ROOT.gStyle.SetPaperSize(27., 29.7)
+#ROOT.gStyle.SetPaperSize(27., 29.7)
+ROOT.gStyle.SetPaperSize(8.0*1.6*cvscale,7.0*1.6*cvscale)
+ROOT.TGaxis.SetMaxDigits(3)
+ROOT.gStyle.SetLineScalePS(2)
+
+# ROOT.gStyle.SetLineStyleString(Int_t i, const char* text)
+# ROOT.gStyle.SetHeaderPS(const char* header)
+# ROOT.gStyle.SetTitlePS(const char* pstitle)
+#ROOT.gStyle.SetColorModelPS(1)
+
+# ROOT.gStyle.SetBarOffset(Float_t baroff = 0.5)
+# ROOT.gStyle.SetBarWidth(Float_t barwidth = 0.5)
+# ROOT.gStyle.SetPaintTextFormat(const char* format = "g")
+# ROOT.gStyle.SetPalette(Int_t ncolors = 0, Int_t* colors = 0)
+# ROOT.gStyle.SetTimeOffset(Double_t toffset)
+# ROOT.gStyle.SetHistMinimumZero(kTRUE)
+
+ROOT.gStyle.SetPaintTextFormat("3.0f")
+
+NRGBs = 5;
+NCont = 255;
+
+stops = numpy.array( [0.00, 0.34, 0.61, 0.84, 1.00] )
+red  = numpy.array( [0.00, 0.00, 0.87, 1.00, 0.51] )
+green = numpy.array( [0.00, 0.81, 1.00, 0.20, 0.00] )
+blue = numpy.array( [0.51, 1.00, 0.12, 0.00, 0.00] )
+
+colWheelDark = ROOT.TColor.CreateGradientColorTable(NRGBs, stops, red, green, blue, NCont)
+
+for i in range(NRGBs):
+    red[i]=min(1,red[i]*1.1+0.25)
+    green[i]=min(1,green[i]*1.1+0.25)
+    blue[i]=min(1,blue[i]*1.1+0.25)
+
+colWheel = ROOT.TColor.CreateGradientColorTable(NRGBs, stops, red, green, blue, NCont)
+ROOT.gStyle.SetNumberContours(NCont)
+ROOT.gRandom.SetSeed(123)
 
 from keras.layers import Dense, Dropout, Flatten,Convolution2D, Convolution1D,LSTM,Concatenate
 from keras.layers.pooling import MaxPooling2D
@@ -25,7 +217,8 @@ except ImportError:
 
 
 fileListTrain = []
-filePathTrain = "/media/matthias/HDD/matthias/Analysis/LLP/training/samples/rootFiles.raw.txt"
+#filePathTrain = "/media/matthias/HDD/matthias/Analysis/LLP/training/samples/rootFiles.raw.txt"
+filePathTrain = "/vols/cms/mkomm/LLP/samples/rootFiles_stripped2.txt"
 f = open(filePathTrain)
 for l in f:
     absPath = os.path.join(filePathTrain.rsplit('/',1)[0],l.replace("\n","").replace("\r","")+"")
@@ -161,7 +354,7 @@ chain = ROOT.TChain("deepntuplizer/tree")
 for f in fileListTrain:
     chain.AddFile(f)
 
-binning = numpy.logspace(1.5,3,num=20)
+binning = numpy.logspace(1.6,3,num=20)
 targetShape = ROOT.TH1F("ptTarget","",len(binning)-1,binning)
 for label in featureDict["truth"]["branches"]:
     branchName = label.split("/")[0]
@@ -171,9 +364,10 @@ for label in featureDict["truth"]["branches"]:
     #hist.SetDirectory(0)
     chain.Project(hist.GetName(),"jet_pt","("+branchName+"==1)")
     if hist.Integral()>0:
+        print " -> entries ",hist.GetEntries()
         hist.Scale(1./hist.Integral())
     else:
-        print "no entries found for class: ",branchName
+        print " -> no entries found for class: ",branchName
         
     if branchName.find("isFromLLgno")==0:
         targetShape.Add(hist,0.1) #lower impact of LLP
@@ -192,38 +386,105 @@ for label in histsPerClass.keys():
         weightsPerClass[label]=weight
     else:
         weightsPerClass[label]=hist
+        
+        
 
-cv = ROOT.TCanvas("cv","",800,600)
+cv = ROOT.TCanvas("cv","",1100,700)
 cv.SetLogx(1)
+cv.SetRightMargin(0.36)
 ymax = max(map(lambda h: h.GetMaximum(),histsPerClass.values()))
-axis = ROOT.TH2F("axis",";pt;",50,binning[0],binning[-1],50,0,ymax*1.1)
+axis = ROOT.TH2F("axis",";jet pT (GeV);Normalized events",50,binning[0],binning[-1],50,0,ymax*1.1)
 axis.Draw("AXIS")
-targetShape.SetLineWidth(3)
-targetShape.SetLineColor(ROOT.kRed)
-targetShape.Draw("SameHISTL")
-for label in histsPerClass.keys():
+
+legend = ROOT.TLegend(0.67,0.98,0.99,0.02)
+legend.SetBorderSize(0)
+legend.SetFillColor(ROOT.kWhite)
+legend.SetTextFont(43)
+legend.SetTextSize(22*cvscale*fontScale)
+
+
+ll = 4
+b = 4
+c = 4
+other = 4
+for label in sorted(histsPerClass.keys()):
+    legend.AddEntry(histsPerClass[label],label.replace("is",""),"L")
+    if label.find("isFromLLgno")>=0:
+        histsPerClass[label].SetLineColor(ROOT.kOrange+7)
+        histsPerClass[label].SetLineWidth(ll/3)
+        histsPerClass[label].SetLineStyle(ll%3+1)
+        ll+=1
+    elif label.find("B")>0:
+        histsPerClass[label].SetLineColor(ROOT.kAzure-4)
+        histsPerClass[label].SetLineWidth(b/2)
+        histsPerClass[label].SetLineStyle(b%2+1)
+        b+=1
+    elif label.find("C")>0:
+        histsPerClass[label].SetLineColor(ROOT.kGreen)
+        histsPerClass[label].SetLineWidth(c/2)
+        histsPerClass[label].SetLineStyle(c%2+1)
+        c+=1
+    else:
+        histsPerClass[label].SetLineColor(ROOT.kGray+1)
+        histsPerClass[label].SetLineWidth(other/2)
+        histsPerClass[label].SetLineStyle(other%2+1)
+        other+=1
+
     histsPerClass[label].Draw("SameHISTL")
+targetShape.SetLineWidth(3)
+targetShape.SetLineColor(ROOT.kBlack)
+targetShape.Draw("SameHISTL")
+legend.AddEntry(targetShape,"Target","L")
+legend.Draw("Same")
 cv.Update()
 cv.Print("pt.pdf")
+#cv.Print("pt.png")
 
 weightFile = ROOT.TFile("weights.root","RECREATE")
-cvWeight = ROOT.TCanvas("cv2","",800,600)
+cvWeight = ROOT.TCanvas("cv2","",1100,700)
+cvWeight.SetRightMargin(0.36)
 cvWeight.SetLogy(1)
 cvWeight.SetLogx(1)
-axisvWeight = ROOT.TH2F("axis2",";pt;",50,binning[0],binning[-1],50,0.1,150)
+axisvWeight = ROOT.TH2F("axis2",";jet pT (GeV);Weight",50,binning[0],binning[-1],50,0.3,50)
 axisvWeight.Draw("AXIS")
 histNames = []
-for label in weightsPerClass.keys():
+ll = 4
+b = 4
+c = 4
+other = 4
+for label in sorted(weightsPerClass.keys()):
+    if label.find("isFromLLgno")>=0:
+        weightsPerClass[label].SetLineColor(ROOT.kOrange+7)
+        weightsPerClass[label].SetLineWidth(ll/3)
+        weightsPerClass[label].SetLineStyle(ll%3+1)
+        ll+=1
+    elif label.find("B")>0:
+        weightsPerClass[label].SetLineColor(ROOT.kAzure-4)
+        weightsPerClass[label].SetLineWidth(b/2)
+        weightsPerClass[label].SetLineStyle(b%2+1)
+        b+=1
+    elif label.find("C")>0:
+        weightsPerClass[label].SetLineColor(ROOT.kGreen)
+        weightsPerClass[label].SetLineWidth(c/2)
+        weightsPerClass[label].SetLineStyle(c%2+1)
+        c+=1
+    else:
+        weightsPerClass[label].SetLineColor(ROOT.kGray+1)
+        weightsPerClass[label].SetLineWidth(other/2)
+        weightsPerClass[label].SetLineStyle(other%2+1)
+        other+=1
     weightsPerClass[label].Draw("SameHISTL")
     weightsPerClass[label].Write()
     histNames.append(weightsPerClass[label].GetName())
     
+legend.Draw("Same")
 cvWeight.Update()
 cvWeight.Print("pt_weight.pdf")
+#cvWeight.Print("pt_weight.png")
 weightFile.Close()
+sys.exit(1)
 
-
-for epoch in range(40):
+for epoch in range(60):
     epoch_duration = time.time()
     print "epoch",epoch+1
     fileListQueue = tf.train.string_input_producer(fileListTrain, num_epochs=1, shuffle=True)
@@ -279,7 +540,7 @@ for epoch in range(40):
     #model.summary()
     #train_op = tf.train.GradientDescentOptimizer(0.01).minimize(loss)
     train_op = tf.train.AdamOptimizer(
-        learning_rate=0.0001,
+        learning_rate=0.000001,
         beta1=0.9,
         beta2=0.999,
         epsilon=1e-08,
@@ -313,13 +574,13 @@ for epoch in range(40):
         while not coord.should_stop():
             step += 1
             start_time = time.time()
-
+            #loss_value, loss_old_value, accuracy_value = sess.run([loss,loss_old,accuracy_op], feed_dict={K.learning_phase(): 1}) #pass 1 for training, 0 for testing
             _, loss_value, loss_old_value, accuracy_value = sess.run([train_op, loss,loss_old,accuracy_op], feed_dict={K.learning_phase(): 1}) #pass 1 for training, 0 for testing
             total_loss+=loss_value
             #data = sess.run(trainingBatch)
             #print data
             duration = time.time() - start_time
-            if step % 1 == 0:
+            if step % 10 == 0:
                 print 'Step %d: loss = %.2f (%.2f), accuracy = %.1f%% (%.3f sec)' % (step, loss_value,loss_old_value,accuracy_value*100.,duration)
     except tf.errors.OutOfRangeError:
         print('Done training for %d steps.' % (step))

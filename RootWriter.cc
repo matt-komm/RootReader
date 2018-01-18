@@ -8,6 +8,7 @@ using namespace tensorflow;
 
 REGISTER_OP("RootWriter")
     .Input("input: float32")
+    .Input("write: int32")
     .Attr("branches: list(string)")
     .Attr("treename: string")
     .Attr("filename: string")
@@ -228,11 +229,6 @@ class RootWriterOp:
         
         virtual ~RootWriterOp()
         {
-            mutex_lock rootLock(globalMutexForROOT_);
-            outputFile_->cd();
-            tree_->Write();
-            outputFile_->Close();
-            branches_.clear();
         }
 
         void Compute(OpKernelContext* context)
@@ -240,6 +236,11 @@ class RootWriterOp:
             //std::cout<<"compute writer"<<std::endl;
             
             mutex_lock localLock(localMutex_);
+            
+            if (not outputFile_)
+            {
+                throw std::runtime_error("Output file not opened");
+            }
             
             const Tensor& input_tensor = context->input(0);
             auto input = input_tensor.flat<float>();
@@ -255,15 +256,25 @@ class RootWriterOp:
             mutex_lock rootLock(globalMutexForROOT_);
             outputFile_->cd();
             tree_->Fill();
+            //std::cout<<"writing entry: "<<tree_->GetEntries()<<std::endl;
             
-            /*
-            Tensor* output_tensor = nullptr;
-            TensorShape shape;
-            shape.AddDim(1);
-            OP_REQUIRES_OK(context, context->allocate_output("output", shape,&output_tensor));
-            auto output = output_tensor->flat<float>();
-            output(0)=0;
-            */
+            
+            const Tensor& write_tensor = context->input(1);
+            auto write_flag = write_tensor.flat<int>();
+            if (write_flag(0)==0)
+            {
+                std::cout<<"closing file"<<std::endl;
+                //outputFile_->cd();
+                //TFile* file = tree_->GetCurrentFile();
+                std::cout<<"write tree: "<<bool(tree_)<<std::endl;
+                std::cout<<"entries: "<<tree_->GetEntries()<<std::endl;
+                tree_->Write();
+                std::cout<<"close file: "<<bool(outputFile_)<<std::endl;
+                outputFile_->Close();
+                std::cout<<"reset file"<<std::endl;
+                branches_.clear();
+                outputFile_.reset();
+            }
         }
             
 };

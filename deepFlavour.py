@@ -97,19 +97,21 @@ def block_deepFlavourDense(x,dropoutRate,active=True,batchnorm=False,batchmoment
     
     return x
 
-def model_deepFlavourReference(Inputs,nclasses,nregclasses,dropoutRate=0.1,momentum=0.6):
+def model_deepFlavourReference(Inputs,nclasses,nregclasses,dropoutRate=0.1,momentum=0.6,batchnorm=False,lstm=False):
     #deep flavor w/o pt regression
     
-    '''
-    globalvars = BatchNormalization(momentum=momentum,name='globals_input_batchnorm') (Inputs[0])
-    cpf    =     BatchNormalization(momentum=momentum,name='cpf_input_batchnorm')     (Inputs[1])
-    npf    =     BatchNormalization(momentum=momentum,name='npf_input_batchnorm')     (Inputs[2])
-    vtx    =     BatchNormalization(momentum=momentum,name='vtx_input_batchnorm')     (Inputs[3])
-    '''
-    globalvars = Inputs[0]
-    cpf    =     Inputs[1]
-    npf    =     Inputs[2]
-    vtx    =     Inputs[3]
+    
+    if (batchnorm):
+        globalvars = BatchNormalization(momentum=momentum,name='globals_input_batchnorm') (Inputs[0])
+        cpf    =     BatchNormalization(momentum=momentum,name='cpf_input_batchnorm')     (Inputs[1])
+        npf    =     BatchNormalization(momentum=momentum,name='npf_input_batchnorm')     (Inputs[2])
+        vtx    =     BatchNormalization(momentum=momentum,name='vtx_input_batchnorm')     (Inputs[3])
+    else:
+        globalvars = Inputs[0]
+        cpf    =     Inputs[1]
+        npf    =     Inputs[2]
+        vtx    =     Inputs[3]
+        
     #gen    =     Inputs[4]
     #ptreginput = BatchNormalization(momentum=momentum,name='reg_input_batchnorm')     (Inputs[4])
 
@@ -118,26 +120,30 @@ def model_deepFlavourReference(Inputs,nclasses,nregclasses,dropoutRate=0.1,momen
                                                 vertices=vtx,
                                                 dropoutRate=dropoutRate,
                                                 active=True,
-                                                batchnorm=False, batchmomentum=momentum)
+                                                batchnorm=batchnorm, batchmomentum=momentum)
 
 
-    #
-    cpf  = LSTM(150,go_backwards=True,implementation=2, name='cpf_lstm')(cpf)
-    #cpf=BatchNormalization(momentum=momentum,name='cpflstm_batchnorm')(cpf)
-    cpf = Dropout(dropoutRate)(cpf)
 
-    npf = LSTM(50,go_backwards=True,implementation=2, name='npf_lstm')(npf)
-    #npf=BatchNormalization(momentum=momentum,name='npflstm_batchnorm')(npf)
-    npf = Dropout(dropoutRate)(npf)
+    if lstm:
+        cpf  = LSTM(150,go_backwards=True,implementation=2, name='cpf_lstm')(cpf)
+        cpf=BatchNormalization(momentum=momentum,name='cpflstm_batchnorm')(cpf)
+        cpf = Dropout(dropoutRate)(cpf)
 
-    vtx = LSTM(50,go_backwards=True,implementation=2, name='vtx_lstm')(vtx)
-    #vtx=BatchNormalization(momentum=momentum,name='vtxlstm_batchnorm')(vtx)
-    vtx = Dropout(dropoutRate)(vtx)
+        npf = LSTM(50,go_backwards=True,implementation=2, name='npf_lstm')(npf)
+        npf=BatchNormalization(momentum=momentum,name='npflstm_batchnorm')(npf)
+        npf = Dropout(dropoutRate)(npf)
 
+        vtx = LSTM(50,go_backwards=True,implementation=2, name='vtx_lstm')(vtx)
+        vtx=BatchNormalization(momentum=momentum,name='vtxlstm_batchnorm')(vtx)
+        vtx = Dropout(dropoutRate)(vtx)
+    else:
+        cpf = Flatten()(cpf)
+        npf = Flatten()(npf)
+        vtx = Flatten()(vtx)
 
     x = Concatenate()( [globalvars,cpf,npf,vtx])
 
-    x = block_deepFlavourDense(x,dropoutRate,active=True,batchnorm=False,batchmomentum=momentum)
+    x = block_deepFlavourDense(x,dropoutRate,active=True,batchnorm=batchnorm,batchmomentum=momentum)
 
     flavour_pred=Dense(nclasses, activation='softmax',kernel_initializer='lecun_uniform',name='ID_pred')(x)
 

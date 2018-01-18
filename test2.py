@@ -5,13 +5,15 @@ import ROOT
 import sys
 import numpy
 from root_reader import root_reader
+from train_test_splitter import train_test_splitter
 
 classificationweights_module = tf.load_op_library('./libClassificationWeights.so')
 
+
 fileList = []
 
-filePath = "/media/matthias/HDD/matthias/Analysis/LLP/training/samples/rootFiles.raw.txt"
-#filePath = "/vols/cms/mkomm/LLP/samples/rootFiles_stripped2.txt"
+#filePath = "/media/matthias/HDD/matthias/Analysis/LLP/training/samples/rootFiles.raw.txt"
+filePath = "/vols/cms/mkomm/LLP/samples/rootFiles_stripped2.txt"
 
 f = open(filePath)
 for l in f:
@@ -20,7 +22,7 @@ for l in f:
 f.close()
 print len(fileList)
 
-#fileList = fileList[:20]
+fileList = fileList[:6]
 
 
 
@@ -205,7 +207,7 @@ for epoch in range(1):
     fileListQueue = tf.train.string_input_producer(fileList, num_epochs=1, shuffle=True)
 
     rootreader_op = [
-        root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=100).batch() for _ in range(4)
+        root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=100).batch() for _ in range(1)
     ]
     
     batchSize = 10
@@ -214,12 +216,12 @@ for epoch in range(1):
     
     #check: tf.contrib.training.stratified_sample
     #for online resampling for equal pt/eta weights
-    #trainingBatch = tf.train.batch_join(
-    trainingBatch = tf.train.shuffle_batch_join(
+    trainingBatch = tf.train.batch_join(
+    #trainingBatch = tf.train.shuffle_batch_join(
         rootreader_op, 
         batch_size=batchSize, 
         capacity=capacity,
-        min_after_dequeue=minAfterDequeue,
+        #min_after_dequeue=minAfterDequeue,
         enqueue_many=True #requires to read examples in batches!
     )
     #trainingBatch["num"]=tf.sign(tf.mod(trainingBatch["num"],tf.constant(10,shape=trainingBatch["num"].get_shape())))
@@ -233,6 +235,12 @@ for epoch in range(1):
         0
     )
     print weights
+
+    train_test_split = train_test_splitter(
+        trainingBatch["num"],
+        trainingBatch,
+        percentage=20
+    )
 
     init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer()) 
     
@@ -251,18 +259,32 @@ for epoch in range(1):
     jet_pt = tf.map_fn(lambda x: x[0], trainingBatch["globals"])
     
     
-    steps = 1
+    steps = 0
     try:
         while(True):
+            steps+=1
             t = time.time()
-            result = sess.run([trainingBatch,jet_pt,weights,tf.argmax(trainingBatch["truth"],axis=1)])
+            #result = sess.run([trainingBatch,jet_pt,weights,tf.argmax(trainingBatch["truth"],axis=1)])
+            result = sess.run([
+                tf.map_fn(lambda x: x[0],train_test_split.train()["globals"]),
+                tf.map_fn(lambda x: x[0],train_test_split.test()["globals"]),
+                tf.map_fn(lambda x: x[0],trainingBatch["globals"])
+            ])
             t = time.time()-t
+            print "-- step %3i (%8.3fs) --"%(steps,t)
+            
+            print "train",result[0]
+            print "test",result[1]
+            print "all",result[2]
+            print
+            '''
             if steps%1==0:
                 print "-- step %3i (%8.3fs) --"%(steps,t)
                 for i in range(len(result[1])):
                     print "%33s:  pt=%6.1f  w=%6.2e"%(histNames[result[3][i]],result[1][i],result[2][i])#,result[0]["globals"][i][0]
                 print 
-            steps+=1
+            '''
+            
             if steps>20:
                 break
             

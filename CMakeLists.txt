@@ -35,6 +35,12 @@ add_library(ClassificationWeights
 )
 target_link_libraries(ClassificationWeights ${TensorFlow_LIBRARY} ${ROOT_LIBRARIES})
 
+add_library(TrainTestSplitting
+    MODULE
+    TrainTestSplitting.cc
+)
+target_link_libraries(TrainTestSplitting ${TensorFlow_LIBRARY} ${ROOT_LIBRARIES})
+
 
 add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0 -std=c++11)
 
@@ -47,4 +53,9 @@ copy_file_if_changed(
     ${CMAKE_SOURCE_DIR}/root_writer.py
     ${CMAKE_CURRENT_BINARY_DIR}/root_writer.py
     RootWriter
+)
+copy_file_if_changed(
+    ${CMAKE_SOURCE_DIR}/train_test_splitter.py
+    ${CMAKE_CURRENT_BINARY_DIR}/train_test_splitter.py
+    TrainTestSplitting
 )

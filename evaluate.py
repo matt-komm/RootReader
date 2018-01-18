@@ -3,6 +3,7 @@ import keras
 from keras import backend as K
 import os
 import time
+import ROOT
 from root_reader import root_reader
 from root_writer import root_writer
 
@@ -29,11 +30,14 @@ from deepFlavour import model_deepFlavourReference
 fileList = []
 
 filePath = "/vols/cms/mkomm/LLP/samples/rootFiles_test_stripped.txt"
-
+#filePath = "/vols/cms/mkomm/LLP/samples/rootFiles_stripped2.txt"
 f = open(filePath)
 for l in f:
     absPath = os.path.join(filePath.rsplit('/',1)[0],l.replace("\n","").replace("\r","")+"")
-    fileList.append(absPath)
+    rootFile = ROOT.TFile(absPath)
+    tree = rootFile.Get("deepntuplizer/tree")
+    if tree and tree.GetEntries()>0:
+        fileList.append([absPath,tree.GetEntries()])
 f.close()
 
 start = 0
@@ -103,7 +107,7 @@ featureDict = {
         ],
         "multiplicity":None
     },
-    "global": {
+    "globals": {
         "branches": [
             'jet_pt',
             'jet_eta',
@@ -165,13 +169,16 @@ featureDict = {
 
 loss_mean = []
 
-for ifile,fileName in enumerate(fileList):
-    print ifile+1,"/",len(fileList),": ",fileName
+for ifile,fileNameSizePair in enumerate(fileList):
+    
+    fileName = fileNameSizePair[0]
+    nevents = fileNameSizePair[1]
+    print ifile+1,"/",len(fileList),": ",fileName, "(",nevents,")"
     fileListQueue = tf.train.string_input_producer([fileName], num_epochs=1, shuffle=False)
 
     rootreader_op = root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=1).batch()
     
-    globalvars = keras.layers.Input(tensor=rootreader_op['global'])
+    globalvars = keras.layers.Input(tensor=rootreader_op['globals'])
     cpf = keras.layers.Input(tensor=rootreader_op['Cpfcan'])
     npf = keras.layers.Input(tensor=rootreader_op['Npfcan'])
     vtx = keras.layers.Input(tensor=rootreader_op['sv'])
@@ -190,7 +197,7 @@ for ifile,fileName in enumerate(fileList):
     for branch in featureDict["truth"]["branches"]:
         s = branch.rsplit("/",1)
         eval_labels.append("eval_"+s[0]+"/"+s[1])
-    rootwriter_op = root_writer(prediction,eval_labels,"evaluated",fileName+".friend").write()
+    rootwriter_op, write_flag = root_writer(prediction,eval_labels,"evaluated",fileName+".friend").write()
     #init_op = tf.global_variables_initializer() #bug https://github.com/tensorflow/tensorflow/issues/1045
     init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 
@@ -203,15 +210,33 @@ for ifile,fileName in enumerate(fileList):
     total_loss = 0
     
     print "loading weights ..."
-    model.load_weights("model_epoch14.hdf5") #use after init_op which initializes random weights!!!
+    model.load_weights("model_epoch40.hdf5") #use after init_op which initializes random weights!!!
     
     try:
         step = 0
         while not coord.should_stop():
+            step += 1
             start_time = time.time()
 
             #TODO: figure out why setting training phase to 0 gives very wrong results (e.g. remove batchnorm layers)
-            num_value,prediction_value,truth_value,loss_value,accuracy_value,_= sess.run([num,prediction,truth,loss,accuracy_op,rootwriter_op], feed_dict={K.learning_phase(): 0}) #pass 1 for training, 0 for testing
+            
+            if step<nevents:
+                num_value,prediction_value,truth_value,loss_value,accuracy_value,_= sess.run(
+                    [num,prediction,truth,loss,accuracy_op,rootwriter_op], 
+                    feed_dict={
+                        K.learning_phase(): 0,
+                        write_flag: [1]
+                    }
+                )
+            else:
+                num_value,prediction_value,truth_value,loss_value,accuracy_value,_= sess.run(
+                    [num,prediction,truth,loss,accuracy_op,rootwriter_op], 
+                    feed_dict={
+                        K.learning_phase(): 0,
+                        write_flag: [0]
+                    }
+                )
+             #pass 1 for training, 0 for testing
             #print prediction_value,truth_value
             #data = sess.run(trainingBatch)
             #print
@@ -221,9 +246,10 @@ for ifile,fileName in enumerate(fileList):
             duration = time.time() - start_time
             if step % 10000 == 0:
                 print 'Step %d: loss = %.2f, accuracy=%.1f%% (%.3f sec)' % (step, loss_value,accuracy_value*100.,duration)
-            step += 1
             
             
+            
+
             
     except tf.errors.OutOfRangeError:
         print('Done evaluation for %d steps.' % (step))
@@ -231,7 +257,4 @@ for ifile,fileName in enumerate(fileList):
     coord.request_stop()
     coord.join(threads)
     K.clear_session()
-
-    
-    
     
