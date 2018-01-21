@@ -229,10 +229,7 @@ for l in f:
 f.close()
 print "files train ",len(fileListTrain)
 
-
-    
-
-#fileListTrain = fileListTrain[:6]
+fileListTrain = fileListTrain[:4]+fileListTrain[100:101]+fileListTrain[150:151]
 
 #print fileList
 
@@ -443,6 +440,7 @@ cv.Update()
 cv.Print("pt.pdf")
 #cv.Print("pt.png")
 
+
 weightFile = ROOT.TFile("weights.root","RECREATE")
 cvWeight = ROOT.TCanvas("cv2","",1100,700)
 cvWeight.SetRightMargin(0.36)
@@ -503,6 +501,8 @@ def setupModel(batch):
         0
     )
     result["weights"]=weights
+    #weights_sum = tf.reduce_mean(weights)
+    #weights = tf.divide(weights,weights_sum)
 
     nclasses = truth.shape.as_list()[1]
     inputs = [globalvars,cpf,npf,vtx]
@@ -512,7 +512,7 @@ def setupModel(batch):
         1,
         dropoutRate=0.1,
         momentum=0.6,
-        batchnorm=False,
+        batchnorm=True,
         lstm=False
     )
     result["prediction"] = prediction
@@ -528,7 +528,7 @@ def setupModel(batch):
     
     return result
 
-for epoch in range(60):
+for epoch in range(200):
     epoch_duration = time.time()
     print "epoch",epoch+1
     fileListQueue = tf.train.string_input_producer(fileListTrain, num_epochs=1, shuffle=True)
@@ -537,7 +537,7 @@ for epoch in range(60):
         root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=100).batch() for _ in range(6)
     ]
     
-    batchSize = 10000
+    batchSize = 2000
     minAfterDequeue = batchSize*2
     capacity = minAfterDequeue + 3*batchSize
     
@@ -560,17 +560,28 @@ for epoch in range(60):
     test_batch = train_test_split.test()
 
     model_train = setupModel(train_batch)
-    model_test = setupModel(test_batch)
+    
+    placeholder_test = {}
+    for l in train_batch.keys():
+        placeholder_test[l]=tf.placeholder(
+            train_batch[l].dtype,
+            train_batch[l].shape
+        )
+    
+    model_test = setupModel(placeholder_test)
 
+    for layer in model_train["model"].layers:
+        if type(layer)==keras.layers.normalization.BatchNormalization:
+            print layer._updates
     
-    
+    sys.exit(1)
     
     #model.add_loss(loss)
     #model.compile(optimizer='rmsprop', loss=None)
     #model.summary()
     #train_op = tf.train.GradientDescentOptimizer(0.01).minimize(loss)
     train_op = tf.train.AdamOptimizer(
-        learning_rate=0.001,
+        learning_rate=0.00001,
         beta1=0.9,
         beta2=0.999,
         epsilon=1e-08,
@@ -590,45 +601,68 @@ for epoch in range(60):
 
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+    '''
+    batchnorm_weights = {}
+    for layer in model_train["model"].layers:
+        if type(layer)==keras.layers.normalization.BatchNormalization:
+            batchnorm_weights[layer]=layer.get_weights()
+    '''
     
-    
-    if os.path.exists("model_epoch"+str(epoch-1)+".hdf5"):
-        print "loading weights ... model_epoch"+str(epoch-1)+".hdf5"
+    if os.path.exists("model_alt3_epoch"+str(epoch-1)+".hdf5"):
+        print "loading weights ... model_alt3_epoch"+str(epoch-1)+".hdf5"
         #use after init_op which initializes random weights!!!
-        model_train["model"].load_weights("model_epoch"+str(epoch-1)+".hdf5")
-        
+        model_train["model"].load_weights("model_alt3_epoch"+str(epoch-1)+".hdf5")
     elif epoch>0:
         print "no weights from previous epoch found"
         sys.exit(1)
         
+    '''
+    for layer in model_train["model"].layers:
+        if type(layer)==keras.layers.normalization.BatchNormalization:
+            layer.set_weights(batchnorm_weights[layer])
+    '''
+
         
     total_loss_train = 0
     total_loss_test = 0
+    
+    
+    start_time = time.time()
     try:
         step = 0
         while not coord.should_stop():
             step += 1
-            start_time = time.time()
-            #assuming loss is calculated before weights are updated
+            
+            #loss is calculated before weights are updated
             model_test["model"].set_weights(model_train["model"].get_weights()) 
-            _, loss_train,loss_test, accuracy_train,accuracy_test = sess.run([
+            _, loss_train, accuracy_train,test_batch_value = sess.run([
                     train_op, 
-                    model_train["weighted_loss"],model_test["weighted_loss"],
-                    model_train["accuracy"],model_test["accuracy"]
+                    model_train["weighted_loss"],model_train["accuracy"],
+                    test_batch
                 ], 
                     feed_dict={K.learning_phase(): 1}
             )
+            feed_dict = {K.learning_phase(): 0}
+            for l in placeholder_test.keys():
+                feed_dict[placeholder_test[l]]=test_batch_value[l]
+            loss_test, accuracy_test = sess.run([
+                    model_test["weighted_loss"],model_test["accuracy"]
+                ], 
+                    feed_dict=feed_dict
+            )
             total_loss_train+=loss_train
             total_loss_test+=loss_test
-            duration = time.time() - start_time
+            
             if step % 10 == 0:
+                duration = (time.time() - start_time)/10.
                 print 'Step %d: loss = %.2f (%.2f), accuracy = %.1f%% (%.1f%%), time = %.3f sec' % (step, loss_train,loss_test,accuracy_train*100.,accuracy_test*100.,duration)
+                start_time = time.time()
     except tf.errors.OutOfRangeError:
         print('Done training for %d steps.' % (step))
-    model_train["model"].save_weights("model_epoch"+str(epoch)+".hdf5")
+    model_train["model"].save_weights("model_alt3_epoch"+str(epoch)+".hdf5")
     print "Epoch duration = (%.1f min)"%((time.time()-epoch_duration)/60.)
     print "Average loss = %.2f (%.2f)"%(total_loss_train/step,total_loss_test/step)
-    f = open("model_epoch.stat","a")
+    f = open("model_alt3_epoch.stat","a")
     f.write(str(epoch)+";"+str(total_loss_train/step)+";"+str(total_loss_test/step)+";"+str(accuracy_train*100.)+";"+str(accuracy_test*100.)+"\n")
     f.close()
     coord.request_stop()

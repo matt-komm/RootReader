@@ -59,9 +59,15 @@ class TrainTestSplittingOp:
         { 
         }
         
-        inline int hash(int value) const //unfortunately std::hash<int> maps back
+        static long hash(long value) //unfortunately std::hash<int> maps back
         {
-            return (value<<2)^((value/3)>>1)<<1 + (value*value>>1)^((value-1)<<2);
+            constexpr static uint32_t c2=0x27d4eb2d; // a prime or an odd constant
+            uint32_t key = (value ^ 61) ^ (value >> 16);
+            key = key + (key << 3);
+            key = key ^ (key >> 4);
+            key = key * c2;
+            key = key ^ (key >> 15);
+            return key;
         }
         
         bool isTesting(int value) const
