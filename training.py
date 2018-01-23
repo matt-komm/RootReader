@@ -221,7 +221,9 @@ except ImportError:
 
 fileListTrain = []
 #filePathTrain = "/media/matthias/HDD/matthias/Analysis/LLP/training/samples/rootFiles.raw.txt"
-filePathTrain = "/vols/cms/mkomm/LLP/samples/rootFiles_stripped2.txt"
+#filePathTrain = "/vols/cms/mkomm/LLP/samples/rootFiles_stripped2.txt"
+filePathTrain = "/vols/cms/mkomm/LLP/samples2_split/rootFiles_b.txt"
+
 f = open(filePathTrain)
 for l in f:
     absPath = os.path.join(filePathTrain.rsplit('/',1)[0],l.replace("\n","").replace("\r","")+"")
@@ -229,7 +231,7 @@ for l in f:
 f.close()
 print "files train ",len(fileListTrain)
 
-fileListTrain = fileListTrain[:4]+fileListTrain[100:101]+fileListTrain[150:151]
+fileListTrain = fileListTrain[:20]#+fileListTrain[-5:]
 
 #print fileList
 
@@ -268,18 +270,18 @@ featureDict = {
             'isS/UInt_t',
             'isG/UInt_t',
             'isUndefined/UInt_t',
-            'isFromLLgno_isB/UInt_t',
-            'isFromLLgno_isBB/UInt_t',
-            'isFromLLgno_isGBB/UInt_t',
-            'isFromLLgno_isLeptonicB/UInt_t',
-            'isFromLLgno_isLeptonicB_C/UInt_t',
-            'isFromLLgno_isC/UInt_t',
-            'isFromLLgno_isCC/UInt_t',
-            'isFromLLgno_isGCC/UInt_t',
-            'isFromLLgno_isUD/UInt_t',
-            'isFromLLgno_isS/UInt_t',
-            'isFromLLgno_isG/UInt_t',
-            'isFromLLgno_isUndefined/UInt_t'
+            #'isFromLLgno_isB/UInt_t',
+            #'isFromLLgno_isBB/UInt_t',
+            #'isFromLLgno_isGBB/UInt_t',
+            #'isFromLLgno_isLeptonicB/UInt_t',
+            #'isFromLLgno_isLeptonicB_C/UInt_t',
+            #'isFromLLgno_isC/UInt_t',
+            #'isFromLLgno_isCC/UInt_t',
+            #'isFromLLgno_isGCC/UInt_t',
+            #'isFromLLgno_isUD/UInt_t',
+            #'isFromLLgno_isS/UInt_t',
+            #'isFromLLgno_isG/UInt_t',
+            #'isFromLLgno_isUndefined/UInt_t'
         ],
     },
     
@@ -528,7 +530,7 @@ def setupModel(batch):
     
     return result
 
-for epoch in range(200):
+for epoch in range(30):
     epoch_duration = time.time()
     print "epoch",epoch+1
     fileListQueue = tf.train.string_input_producer(fileListTrain, num_epochs=1, shuffle=True)
@@ -570,12 +572,6 @@ for epoch in range(200):
     
     model_test = setupModel(placeholder_test)
 
-    for layer in model_train["model"].layers:
-        if type(layer)==keras.layers.normalization.BatchNormalization:
-            print layer._updates
-    
-    sys.exit(1)
-    
     #model.add_loss(loss)
     #model.compile(optimizer='rmsprop', loss=None)
     #model.summary()
@@ -601,12 +597,6 @@ for epoch in range(200):
 
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-    '''
-    batchnorm_weights = {}
-    for layer in model_train["model"].layers:
-        if type(layer)==keras.layers.normalization.BatchNormalization:
-            batchnorm_weights[layer]=layer.get_weights()
-    '''
     
     if os.path.exists("model_alt3_epoch"+str(epoch-1)+".hdf5"):
         print "loading weights ... model_alt3_epoch"+str(epoch-1)+".hdf5"
@@ -615,13 +605,6 @@ for epoch in range(200):
     elif epoch>0:
         print "no weights from previous epoch found"
         sys.exit(1)
-        
-    '''
-    for layer in model_train["model"].layers:
-        if type(layer)==keras.layers.normalization.BatchNormalization:
-            layer.set_weights(batchnorm_weights[layer])
-    '''
-
         
     total_loss_train = 0
     total_loss_test = 0
@@ -635,8 +618,8 @@ for epoch in range(200):
             
             #loss is calculated before weights are updated
             model_test["model"].set_weights(model_train["model"].get_weights()) 
-            _, loss_train, accuracy_train,test_batch_value = sess.run([
-                    train_op, 
+            _,_, loss_train, accuracy_train,test_batch_value = sess.run([
+                    train_op, model_train["model"].updates,
                     model_train["weighted_loss"],model_train["accuracy"],
                     test_batch
                 ], 
