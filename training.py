@@ -14,11 +14,9 @@ cvscale = 1.0
 
 fontScale = 750./650.
 
-ROOT.gROOT.Reset()
 ROOT.gROOT.SetBatch(True)
 ROOT.gStyle.SetOptStat(0)
 ROOT.gStyle.SetOptFit(0)
-ROOT.gROOT.Reset()
 ROOT.gROOT.SetStyle("Plain")
 ROOT.gStyle.SetOptStat(0)
 ROOT.gStyle.SetOptFit(1111)
@@ -241,10 +239,10 @@ except ImportError:
 
 
 fileListTrain = []
-#filePathTrain = "/media/matthias/HDD/matthias/Analysis/LLP/training/samples/rootFiles.raw.txt"
+filePathTrain = "/media/matthias/HDD/matthias/Analysis/LLP/training/samples/rootFiles.raw.txt"
 #filePathTrain = "/vols/cms/mkomm/LLP/samples/rootFiles_stripped2.txt"
 #filePathTrain = "/vols/cms/mkomm/LLP/samples2_split/rootFiles_b.txt"
-filePathTrain = "/vols/cms/mkomm/LLP/samples2_split/rootFiles_llp.txt"
+#filePathTrain = "/vols/cms/mkomm/LLP/samples2_split/rootFiles_llp.txt"
 
 outputFolder = "llponly"
 if os.path.exists(outputFolder):
@@ -260,7 +258,7 @@ for l in f:
 f.close()
 print "files train ",len(fileListTrain)
 
-#fileListTrain = fileListTrain[:5]+fileListTrain[-5:]
+fileListTrain = fileListTrain[:5]+fileListTrain[-5:]
 
 #print fileList
 
@@ -300,18 +298,18 @@ featureDict = {
             'isG/UInt_t',
             'isUndefined/UInt_t',
             'isFromLLgno/UInt_t',
-            #'isFromLLgno_isB/UInt_t',
-            #'isFromLLgno_isBB/UInt_t',
-            #'isFromLLgno_isGBB/UInt_t',
-            #'isFromLLgno_isLeptonicB/UInt_t',
-            #'isFromLLgno_isLeptonicB_C/UInt_t',
-            #'isFromLLgno_isC/UInt_t',
-            #'isFromLLgno_isCC/UInt_t',
-            #'isFromLLgno_isGCC/UInt_t',
-            #'isFromLLgno_isUD/UInt_t',
-            #'isFromLLgno_isS/UInt_t',
-            #'isFromLLgno_isG/UInt_t',
-            #'isFromLLgno_isUndefined/UInt_t'
+            'isFromLLgno_isB/UInt_t',
+            'isFromLLgno_isBB/UInt_t',
+            'isFromLLgno_isGBB/UInt_t',
+            'isFromLLgno_isLeptonicB/UInt_t',
+            'isFromLLgno_isLeptonicB_C/UInt_t',
+            'isFromLLgno_isC/UInt_t',
+            'isFromLLgno_isCC/UInt_t',
+            'isFromLLgno_isGCC/UInt_t',
+            'isFromLLgno_isUD/UInt_t',
+            'isFromLLgno_isS/UInt_t',
+            'isFromLLgno_isG/UInt_t',
+            'isFromLLgno_isUndefined/UInt_t'
         ],
     },
     
