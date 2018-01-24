@@ -561,7 +561,7 @@ def setupModel(batch):
         dropoutRate=0.1,
         momentum=0.6,
         batchnorm=True,
-        lstm=True
+        lstm=False
     )
     result["prediction"] = prediction
     cross_entropy = keras.losses.categorical_crossentropy(truth, prediction)
@@ -579,46 +579,46 @@ def setupModel(batch):
 for epoch in range(60):
     epoch_duration = time.time()
     print "epoch",epoch+1
-    fileListQueue = tf.train.string_input_producer(fileListTrain, num_epochs=1, shuffle=True)
+    with tf.device('/cpu:0'):
+        fileListQueue = tf.train.string_input_producer(fileListTrain, num_epochs=1, shuffle=True)
 
-    rootreader_op = []
-    for _ in range(min(len(fileListTrain),6)):
-        rootreader_op.append(
-            root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=100).batch() 
+        rootreader_op = []
+        for _ in range(min(len(fileListTrain),6)):
+            rootreader_op.append(
+                root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=100).batch() 
+            )
+        
+        
+        batchSize = 10000
+        minAfterDequeue = batchSize*2
+        capacity = minAfterDequeue + 3*batchSize
+        
+        #check: tf.contrib.training.stratified_sample
+        #for online resampling for equal pt/eta weights
+        #trainingBatch = tf.train.batch_join(
+        batch = tf.train.shuffle_batch_join(
+            rootreader_op, 
+            batch_size=batchSize, 
+            capacity=capacity,
+            min_after_dequeue=minAfterDequeue,
+            enqueue_many=True #requires to read examples in batches!
         )
-    
-    
-    batchSize = 10000
-    minAfterDequeue = batchSize*2
-    capacity = minAfterDequeue + 3*batchSize
-    
-    #check: tf.contrib.training.stratified_sample
-    #for online resampling for equal pt/eta weights
-    #trainingBatch = tf.train.batch_join(
-    batch = tf.train.shuffle_batch_join(
-        rootreader_op, 
-        batch_size=batchSize, 
-        capacity=capacity,
-        min_after_dequeue=minAfterDequeue,
-        enqueue_many=True #requires to read examples in batches!
-    )
-    train_test_split = train_test_splitter(
-        batch["num"],
-        batch,
-        percentage=10
-    )
-    train_batch = train_test_split.train()
-    test_batch = train_test_split.test()
+        train_test_split = train_test_splitter(
+            batch["num"],
+            batch,
+            percentage=10
+        )
+        train_batch = train_test_split.train()
+        test_batch = train_test_split.test()
+        
+        placeholder_test = {}
+        for l in train_batch.keys():
+            placeholder_test[l]=tf.placeholder(
+                train_batch[l].dtype,
+                train_batch[l].shape
+            )
 
     model_train = setupModel(train_batch)
-    
-    placeholder_test = {}
-    for l in train_batch.keys():
-        placeholder_test[l]=tf.placeholder(
-            train_batch[l].dtype,
-            train_batch[l].shape
-        )
-    
     model_test = setupModel(placeholder_test)
 
     #model.add_loss(loss)
@@ -668,7 +668,7 @@ for epoch in range(60):
             
             #loss is calculated before weights are updated
             model_test["model"].set_weights(model_train["model"].get_weights()) 
-            _,_, loss_train, accuracy_train,test_batch_value = sess.run([
+            _,_,loss_train, accuracy_train,test_batch_value = sess.run([
                     train_op, model_train["model"].updates,
                     model_train["weighted_loss"],model_train["accuracy"],
                     test_batch
