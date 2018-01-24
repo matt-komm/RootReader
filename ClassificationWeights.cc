@@ -13,7 +13,7 @@ REGISTER_OP("ClassificationWeights")
     .Output("out: float32")
     .Attr("rootfile: string")
     .Attr("histnames: list(string)")
-    .Attr("varindex: int")
+    .Attr("varindex: list(int)")
     .SetIsStateful()
     .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) 
     {
@@ -39,7 +39,7 @@ REGISTER_OP("ClassificationWeights")
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/shape_inference.h"
 
-#include "TH1F.h"
+#include "TH2F.h"
 #include "TFile.h"
 
 
@@ -51,8 +51,8 @@ class ClassificationWeightsOp:
         std::string filePath;
         std::vector<std::string> histNames;
         bool transpose_;
-        std::vector<TH1F> hists;
-        int varIndex;
+        std::vector<TH2F> hists;
+        std::vector<int> varIndex;
     public:
         explicit ClassificationWeightsOp(OpKernelConstruction* context): 
             OpKernel(context)
@@ -76,7 +76,7 @@ class ClassificationWeightsOp:
             }
             for (auto histName: histNames)
             {
-                TH1F* hist = dynamic_cast<TH1F*>(rootFile.Get(histName.c_str()));
+                TH2F* hist = dynamic_cast<TH2F*>(rootFile.Get(histName.c_str()));
                 if (not hist)
                 {
                     throw std::runtime_error("Cannot find hist '"+histName+"' in file '"+filePath+"'");
@@ -91,14 +91,10 @@ class ClassificationWeightsOp:
         { 
         }
         
-        float computeWeight(int classIndex, float value)
+        float computeWeight(int classIndex, float value1, float value2)
         {
-            TH1& hist = hists[classIndex];
-            int bin = hist.FindBin(value);
-            if (bin==0 or bin>=hist.GetNbinsX()+1)
-            {
-                return 0;
-            }
+            TH2& hist = hists[classIndex];
+            int bin = hist.FindBin(value1,value2);
             return hist.GetBinContent(bin);
         }
 
@@ -135,9 +131,9 @@ class ClassificationWeightsOp:
                     }
                 }
                 if (class_index<0) throw std::runtime_error("labels tensor needs to be one-hot encoded");
-                float varValue = value(ibatch*value_size+varIndex);
-                
-                output(ibatch) = computeWeight(class_index,varValue);
+                float varValue1 = value(ibatch*value_size+varIndex[0]);
+                float varValue2 = value(ibatch*value_size+varIndex[1]);
+                output(ibatch) = computeWeight(class_index,varValue1,varValue2);
             }
         }  
 };

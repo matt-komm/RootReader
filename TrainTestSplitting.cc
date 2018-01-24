@@ -59,15 +59,13 @@ class TrainTestSplittingOp:
         { 
         }
         
-        static long hash(long value) //unfortunately std::hash<int> maps back
+        static long hash(int value) //unfortunately std::hash<int> maps back
         {
-            constexpr static uint32_t c2=0x27d4eb2d; // a prime or an odd constant
-            uint32_t key = (value ^ 61) ^ (value >> 16);
-            key = key + (key << 3);
-            key = key ^ (key >> 4);
-            key = key * c2;
-            key = key ^ (key >> 15);
-            return key;
+            //use Mersenne prime number here
+            unsigned int x = ((value >> 16) ^ value) * 0x45d9f3b;
+            x = ((x >> 16) ^ x) * 0x45d9f3b;
+            x = (x >> 16) ^ x;
+            return x;
         }
         
         bool isTesting(int value) const

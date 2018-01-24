@@ -200,6 +200,26 @@ colWheel = ROOT.TColor.CreateGradientColorTable(NRGBs, stops, red, green, blue, 
 ROOT.gStyle.SetNumberContours(NCont)
 ROOT.gRandom.SetSeed(123)
 
+colors=[]
+def hex2rgb(value):
+    """Return (red, green, blue) for the color given as #rrggbb."""
+    value = value.lstrip('#')
+    lv = len(value)
+    return tuple(int(value[i:i + lv // 3], 16)/255.0 for i in range(0, lv, lv // 3))
+
+def newColor(red,green,blue):
+    newColor.colorindex+=1
+    color=ROOT.TColor(newColor.colorindex,red,green,blue)
+    colors.append(color)
+    return color
+    
+newColor.colorindex=301
+
+def getDarkerColor(color):
+    darkerColor=newColor(color.GetRed()*0.6,color.GetGreen()*0.6,color.GetBlue()*0.6)
+    return darkerColor
+
+
 from keras.layers import Dense, Dropout, Flatten,Convolution2D, Convolution1D,LSTM,Concatenate
 from keras.layers.pooling import MaxPooling2D
 from keras.layers.normalization import BatchNormalization
@@ -208,21 +228,30 @@ from deepFlavour import model_deepFlavourReference
 
 classificationweights_module = tf.load_op_library('./libClassificationWeights.so')
 
-'''
-DO NOT USE THIS SINCE SGE SETS IT ALREADY
+
 import imp
 try:
-    imp.find_module('setGPU')
-    import setGPU
+    if not os.environ.has_key('CUDA_VISIBLE_DEVICES'):
+        imp.find_module('setGPU')
+        import setGPU
+    print "Using GPU: ",os.environ['CUDA_VISIBLE_DEVICES']
 except ImportError:
     pass
-'''
+
 
 
 fileListTrain = []
 #filePathTrain = "/media/matthias/HDD/matthias/Analysis/LLP/training/samples/rootFiles.raw.txt"
 #filePathTrain = "/vols/cms/mkomm/LLP/samples/rootFiles_stripped2.txt"
-filePathTrain = "/vols/cms/mkomm/LLP/samples2_split/rootFiles_b.txt"
+#filePathTrain = "/vols/cms/mkomm/LLP/samples2_split/rootFiles_b.txt"
+filePathTrain = "/vols/cms/mkomm/LLP/samples2_split/rootFiles_llp.txt"
+
+outputFolder = "llponly"
+if os.path.exists(outputFolder):
+    print "Warning: output folder '%s' already exists!"%outputFolder
+else:
+    print "Creating output folder '%s'!"%outputFolder
+    os.makedirs(outputFolder)
 
 f = open(filePathTrain)
 for l in f:
@@ -231,7 +260,7 @@ for l in f:
 f.close()
 print "files train ",len(fileListTrain)
 
-fileListTrain = fileListTrain[:20]#+fileListTrain[-5:]
+#fileListTrain = fileListTrain[:5]+fileListTrain[-5:]
 
 #print fileList
 
@@ -270,6 +299,7 @@ featureDict = {
             'isS/UInt_t',
             'isG/UInt_t',
             'isUndefined/UInt_t',
+            'isFromLLgno/UInt_t',
             #'isFromLLgno_isB/UInt_t',
             #'isFromLLgno_isBB/UInt_t',
             #'isFromLLgno_isGBB/UInt_t',
@@ -287,7 +317,8 @@ featureDict = {
     
     "gen": {
         "branches":[
-            'genLL_decayLength'
+            'genLL_decayLength',
+            'gen_pt_WithNu',
         ],
     },
     
@@ -348,6 +379,89 @@ featureDict = {
     }
 }
 
+style = {
+    'isB':[newColor(0.8,0.45,0),3,1],
+    'isBB':[newColor(0.85,0.42,0),3,2],
+    'isGBB':[newColor(0.9,0.39,0),2,1],
+    'isLeptonicB':[newColor(0.95,0.36,0),3,2],
+    'isLeptonicB_C':[newColor(1,0.33,0),2,1],
+    
+    'isC':[newColor(0,0.9,0.1),3,2],
+    'isCC':[newColor(0,0.8,0.25),2,1],
+    'isGCC':[newColor(0,0.7,0.35),3,2],
+    
+    'isUD':[newColor(0.65,0.65,0.65),3,1],
+    'isS':[newColor(0.55,0.55,0.55),3,2],
+    'isG':[newColor(0.45,0.45,0.45),3,1],
+    'isUndefined':[newColor(0.4,0.4,0.4),3,2],
+    
+    'isFromLLgno_isB':[newColor(0.0,0.1,1),3,1],
+    'isFromLLgno_isBB':[newColor(0.0,0.13,0.95),3,2],
+    'isFromLLgno_isGBB':[newColor(0.0,0.16,0.9),2,1],
+    'isFromLLgno_isLeptonicB':[newColor(0.0,0.19,0.87),3,1],
+    'isFromLLgno_isLeptonicB_C':[newColor(0.0,0.22,0.85),3,2],
+    'isFromLLgno_isC':[newColor(0.0,0.25,0.83),2,1],
+    'isFromLLgno_isCC':[newColor(0.0,0.28,0.8),3,2],
+    'isFromLLgno_isGCC':[newColor(0.0,0.31,0.77),2,1],
+    'isFromLLgno_isUD':[newColor(0.0,0.34,0.75),3,2],
+    'isFromLLgno_isS':[newColor(0.0,0.37,0.73),2,1],
+    'isFromLLgno_isG':[newColor(0.0,0.4,0.7),3,2],
+    'isFromLLgno_isUndefined':[newColor(0.0,0.43,0.67),2,1],
+}
+
+def drawHists(histDict,branchNameList,legend):
+    
+    ll = 4
+    b = 4
+    c = 4
+    other = 4
+    for label in branchNameList:
+        hist = histDict[label]
+        legend.AddEntry(hist,label.replace("is",""),"L")
+        if label.find("isFromLLgno")>=0:
+            hist.SetLineColor(ROOT.kOrange+7)
+            hist.SetLineWidth(ll/3)
+            hist.SetLineStyle(ll%3+1)
+            ll+=1
+        elif label.find("B")>0:
+            hist.SetLineColor(ROOT.kAzure-4)
+            hist.SetLineWidth(b/2)
+            hist.SetLineStyle(b%2+1)
+            b+=1
+        elif label.find("C")>0:
+            hist.SetLineColor(ROOT.kGreen)
+            hist.SetLineWidth(c/2)
+            hist.SetLineStyle(c%2+1)
+            c+=1
+        else:
+            hist.SetLineColor(ROOT.kMagenta)
+            hist.SetLineWidth(other/2)
+            hist.SetLineStyle(other%2+1)
+            other+=1
+        hist.Draw("SameHISTL")
+
+def makePlot(histDict,branchNameList,binning,title,output,taget=None,logx=0,logy=0):
+    cv = ROOT.TCanvas("cv","",1100,700)
+    cv.SetLogx(logx)
+    cv.SetLogy(logy)
+    cv.SetRightMargin(0.36)
+    ymax = max(map(lambda h: h.GetMaximum(),histDict.values()))
+    axis = ROOT.TH2F("axis",title,50,binning[0],binning[-1],50,0,ymax*1.1)
+    axis.Draw("AXIS")
+    legend = ROOT.TLegend(0.67,0.98,0.99,0.02)
+    legend.SetBorderSize(0)
+    legend.SetFillColor(ROOT.kWhite)
+    legend.SetTextFont(43)
+    legend.SetTextSize(22*cvscale*fontScale)
+    drawHists(histDict,branchNameList,legend)
+    if taget:
+        taget.SetLineWidth(3)
+        taget.SetLineColor(ROOT.kBlack)
+        taget.Draw("SameHISTL")
+        legend.AddEntry(taget,"Target","L")
+    legend.Draw("Same")
+    cv.Update()
+    cv.Print(os.path.join(outputFolder,output+".pdf"))
 
 
 histsPerClass = {}
@@ -355,137 +469,70 @@ weightsPerClass = {}
 chain = ROOT.TChain("deepntuplizer/tree")
 for f in fileListTrain:
     chain.AddFile(f)
+nEntries = chain.GetEntries()
+print "total entries",nEntries
 
-binning = numpy.logspace(1.6,3,num=20)
-targetShape = ROOT.TH1F("ptTarget","",len(binning)-1,binning)
+
+binningPt = numpy.logspace(1.6,3,num=20)
+binningEta = numpy.linspace(-2.4,2.4,num=10)
+targetShape = ROOT.TH2F("ptetaTarget","",len(binningPt)-1,binningPt,len(binningEta)-1,binningEta)
+branchNameList = []
 for label in featureDict["truth"]["branches"]:
     branchName = label.split("/")[0]
+    branchNameList.append(branchName)
     print "projecting ... ",branchName
-    hist = ROOT.TH1F("pt"+branchName,"",len(binning)-1,binning)
+    hist = ROOT.TH2F("pteta"+branchName,"",len(binningPt)-1,binningPt,len(binningEta)-1,binningEta)
     hist.Sumw2()
     #hist.SetDirectory(0)
-    chain.Project(hist.GetName(),"jet_pt","("+branchName+"==1)")
+    chain.Project(hist.GetName(),"jet_eta:jet_pt","("+branchName+"==1)")
     if hist.Integral()>0:
         print " -> entries ",hist.GetEntries()
         hist.Scale(1./hist.Integral())
     else:
         print " -> no entries found for class: ",branchName
         
-    if branchName.find("isFromLLgno")==0:
-        targetShape.Add(hist,0.1) #lower impact of LLP
-    if branchName.find("isB")==0 or branchName.find("isBB")==0:
-        targetShape.Add(hist)
+    if hist.GetEntries()>10000:
+        if branchName.find("isFromLLgno")==0:
+            targetShape.Add(hist,0.1) #lower impact of LLP
+        elif branchName.find("isB")==0 or branchName.find("isBB") or branchName.find("isLeptonicB")==0:
+            targetShape.Add(hist)
     
     histsPerClass[branchName]=hist
 targetShape.Scale(1./targetShape.Integral())
 
-for label in histsPerClass.keys():
+for label in branchNameList:
     hist = histsPerClass[label]
     if (hist.Integral()>0):
-        weight = targetShape.Clone("weight_"+label)
+        weight = targetShape.Clone(label)
         weight.Scale(1) #can use arbitrary scale here to make weight more reasonable
         weight.Divide(hist)
         weightsPerClass[label]=weight
     else:
         weightsPerClass[label]=hist
         
-        
-
-cv = ROOT.TCanvas("cv","",1100,700)
-cv.SetLogx(1)
-cv.SetRightMargin(0.36)
-ymax = max(map(lambda h: h.GetMaximum(),histsPerClass.values()))
-axis = ROOT.TH2F("axis",";jet pT (GeV);Normalized events",50,binning[0],binning[-1],50,0,ymax*1.1)
-axis.Draw("AXIS")
-
-legend = ROOT.TLegend(0.67,0.98,0.99,0.02)
-legend.SetBorderSize(0)
-legend.SetFillColor(ROOT.kWhite)
-legend.SetTextFont(43)
-legend.SetTextSize(22*cvscale*fontScale)
-
-
-ll = 4
-b = 4
-c = 4
-other = 4
-for label in sorted(histsPerClass.keys()):
-    legend.AddEntry(histsPerClass[label],label.replace("is",""),"L")
-    if label.find("isFromLLgno")>=0:
-        histsPerClass[label].SetLineColor(ROOT.kOrange+7)
-        histsPerClass[label].SetLineWidth(ll/3)
-        histsPerClass[label].SetLineStyle(ll%3+1)
-        ll+=1
-    elif label.find("B")>0:
-        histsPerClass[label].SetLineColor(ROOT.kAzure-4)
-        histsPerClass[label].SetLineWidth(b/2)
-        histsPerClass[label].SetLineStyle(b%2+1)
-        b+=1
-    elif label.find("C")>0:
-        histsPerClass[label].SetLineColor(ROOT.kGreen)
-        histsPerClass[label].SetLineWidth(c/2)
-        histsPerClass[label].SetLineStyle(c%2+1)
-        c+=1
-    else:
-        histsPerClass[label].SetLineColor(ROOT.kGray+1)
-        histsPerClass[label].SetLineWidth(other/2)
-        histsPerClass[label].SetLineStyle(other%2+1)
-        other+=1
-
-    histsPerClass[label].Draw("SameHISTL")
-targetShape.SetLineWidth(3)
-targetShape.SetLineColor(ROOT.kBlack)
-targetShape.Draw("SameHISTL")
-legend.AddEntry(targetShape,"Target","L")
-legend.Draw("Same")
-cv.Update()
-cv.Print("pt.pdf")
-#cv.Print("pt.png")
-
-
-weightFile = ROOT.TFile("weights.root","RECREATE")
-cvWeight = ROOT.TCanvas("cv2","",1100,700)
-cvWeight.SetRightMargin(0.36)
-cvWeight.SetLogy(1)
-cvWeight.SetLogx(1)
-axisvWeight = ROOT.TH2F("axis2",";jet pT (GeV);Weight",50,binning[0],binning[-1],50,0.3,50)
-axisvWeight.Draw("AXIS")
-histNames = []
-ll = 4
-b = 4
-c = 4
-other = 4
-for label in sorted(weightsPerClass.keys()):
-    if label.find("isFromLLgno")>=0:
-        weightsPerClass[label].SetLineColor(ROOT.kOrange+7)
-        weightsPerClass[label].SetLineWidth(ll/3)
-        weightsPerClass[label].SetLineStyle(ll%3+1)
-        ll+=1
-    elif label.find("B")>0:
-        weightsPerClass[label].SetLineColor(ROOT.kAzure-4)
-        weightsPerClass[label].SetLineWidth(b/2)
-        weightsPerClass[label].SetLineStyle(b%2+1)
-        b+=1
-    elif label.find("C")>0:
-        weightsPerClass[label].SetLineColor(ROOT.kGreen)
-        weightsPerClass[label].SetLineWidth(c/2)
-        weightsPerClass[label].SetLineStyle(c%2+1)
-        c+=1
-    else:
-        weightsPerClass[label].SetLineColor(ROOT.kGray+1)
-        weightsPerClass[label].SetLineWidth(other/2)
-        weightsPerClass[label].SetLineStyle(other%2+1)
-        other+=1
-    weightsPerClass[label].Draw("SameHISTL")
-    weightsPerClass[label].Write()
-    histNames.append(weightsPerClass[label].GetName())
-    
-legend.Draw("Same")
-cvWeight.Update()
-cvWeight.Print("pt_weight.pdf")
-#cvWeight.Print("pt_weight.png")
+weightFile = ROOT.TFile(os.path.join(outputFolder,"weights.root"),"RECREATE")
+for l,h in weightsPerClass.items():
+    h.Write()
 weightFile.Close()
-#sys.exit(1)
+
+
+histsPt = {l: h.ProjectionX() for l, h in histsPerClass.items()}
+histsEta = {l: h.ProjectionY() for l, h in histsPerClass.items()}
+
+makePlot(histsPt,branchNameList,binningPt,";Jet pT (GeV);Normalized events","pt",taget=targetShape.ProjectionX(),logx=1)
+makePlot(histsEta,branchNameList,binningEta,";Jet #eta;Normalized events","eta",taget=targetShape.ProjectionY())
+
+def divide(n,d):
+    r = n.Clone(d.GetName())
+    r.Divide(d)
+    return r
+weightsPt = {l: divide(targetShape.ProjectionX(),h.ProjectionX()) for l, h in histsPerClass.items()}
+weightsEta = {l: divide(targetShape.ProjectionY(),h.ProjectionY()) for l, h in histsPerClass.items()}
+
+makePlot(weightsPt,branchNameList,binningPt,";Jet pT (GeV);Weight","weight_pt",logx=1,logy=1)
+makePlot(weightsEta,branchNameList,binningEta,";Jet #eta;Weight","weight_eta",logy=1)
+
+
 
 def setupModel(batch):
     result = {}
@@ -494,13 +541,14 @@ def setupModel(batch):
     npf = keras.layers.Input(tensor=batch['Npfcan'])
     vtx = keras.layers.Input(tensor=batch['sv'])
     truth = batch["truth"]
+    genPt = batch["gen"][:,1]
 
     weights = classificationweights_module.classification_weights(
         batch["truth"],
         batch["globals"],
-        "weights.root",
-        histNames,
-        0
+        os.path.join(outputFolder,"weights.root"),
+        branchNameList,
+        [0,1]
     )
     result["weights"]=weights
     #weights_sum = tf.reduce_mean(weights)
@@ -515,7 +563,7 @@ def setupModel(batch):
         dropoutRate=0.1,
         momentum=0.6,
         batchnorm=True,
-        lstm=False
+        lstm=True
     )
     result["prediction"] = prediction
     cross_entropy = keras.losses.categorical_crossentropy(truth, prediction)
@@ -530,16 +578,19 @@ def setupModel(batch):
     
     return result
 
-for epoch in range(30):
+for epoch in range(60):
     epoch_duration = time.time()
     print "epoch",epoch+1
     fileListQueue = tf.train.string_input_producer(fileListTrain, num_epochs=1, shuffle=True)
 
-    rootreader_op = [
-        root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=100).batch() for _ in range(6)
-    ]
+    rootreader_op = []
+    for _ in range(min(len(fileListTrain),6)):
+        rootreader_op.append(
+            root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=100).batch() 
+        )
     
-    batchSize = 2000
+    
+    batchSize = 10000
     minAfterDequeue = batchSize*2
     capacity = minAfterDequeue + 3*batchSize
     
@@ -598,10 +649,10 @@ for epoch in range(30):
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
     
-    if os.path.exists("model_alt3_epoch"+str(epoch-1)+".hdf5"):
-        print "loading weights ... model_alt3_epoch"+str(epoch-1)+".hdf5"
+    if os.path.exists(os.path.join(outputFolder,"model_epoch"+str(epoch-1)+".hdf5")):
+        print "loading weights ... ",os.path.join(outputFolder,"model_epoch"+str(epoch-1)+".hdf5")
         #use after init_op which initializes random weights!!!
-        model_train["model"].load_weights("model_alt3_epoch"+str(epoch-1)+".hdf5")
+        model_train["model"].load_weights(os.path.join(outputFolder,"model_epoch"+str(epoch-1)+".hdf5"))
     elif epoch>0:
         print "no weights from previous epoch found"
         sys.exit(1)
@@ -609,7 +660,8 @@ for epoch in range(30):
     total_loss_train = 0
     total_loss_test = 0
     
-    
+    nTrain = 0
+    nTest = 0
     start_time = time.time()
     try:
         step = 0
@@ -633,20 +685,30 @@ for epoch in range(30):
                 ], 
                     feed_dict=feed_dict
             )
-            total_loss_train+=loss_train
-            total_loss_test+=loss_test
-            
+            #account for dynamic batch size
+            nTestBatch = len(test_batch_value["num"])
+            nTest+=nTestBatch
+            nTrain+=batchSize-nTestBatch
+            if (batchSize-nTestBatch)>0:
+                total_loss_train+=loss_train*(batchSize-nTestBatch)
+            if (nTestBatch)>0:
+                total_loss_test+=loss_test*nTestBatch
+                    
+                
             if step % 10 == 0:
                 duration = (time.time() - start_time)/10.
-                print 'Step %d: loss = %.2f (%.2f), accuracy = %.1f%% (%.1f%%), time = %.3f sec' % (step, loss_train,loss_test,accuracy_train*100.,accuracy_test*100.,duration)
+                print 'Step %d/%d: loss = %.2f (%.2f), accuracy = %.1f%% (%.1f%%), time = %.3f sec' % (step,math.floor(1.*nEntries/batchSize), loss_train,loss_test,accuracy_train*100.,accuracy_test*100.,duration)
                 start_time = time.time()
     except tf.errors.OutOfRangeError:
         print('Done training for %d steps.' % (step))
-    model_train["model"].save_weights("model_alt3_epoch"+str(epoch)+".hdf5")
+    model_train["model"].save_weights(os.path.join(outputFolder,"model_epoch"+str(epoch)+".hdf5"))
     print "Epoch duration = (%.1f min)"%((time.time()-epoch_duration)/60.)
-    print "Average loss = %.2f (%.2f)"%(total_loss_train/step,total_loss_test/step)
-    f = open("model_alt3_epoch.stat","a")
-    f.write(str(epoch)+";"+str(total_loss_train/step)+";"+str(total_loss_test/step)+";"+str(accuracy_train*100.)+";"+str(accuracy_test*100.)+"\n")
+    avgLoss_train = total_loss_train/nTrain
+    avgLoss_test = total_loss_test/nTest
+    print "Training/Testing = %i/%i, Testing rate = %4.1f%%"%(nTrain,nTest,100.*nTest/(nTrain+nTest))
+    print "Average loss = %.2f (%.2f)"%(avgLoss_train,avgLoss_test)
+    f = open(os.path.join(outputFolder,"model_epoch.stat"),"a")
+    f.write(str(epoch)+";"+str(avgLoss_train)+";"+str(avgLoss_test)+";"+str(accuracy_train*100.)+";"+str(accuracy_test*100.)+"\n")
     f.close()
     coord.request_stop()
     coord.join(threads)
