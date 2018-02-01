@@ -244,20 +244,24 @@ class RootWriterOp:
             
             const Tensor& input_tensor = context->input(0);
             auto input = input_tensor.flat<float>();
-            if (input.size()!=branches_.size())
-            {
-                throw std::runtime_error("Mismatching tensor ("+std::to_string(input.size())+")  <-> branch length ("+std::to_string(branches_.size())+")");
-            }
-            for (unsigned int i = 0; i < input.size(); ++i)
-            {
-                //std::cout<<"writing "<<branches_[i]->name()<<" = "<<input(i)<<std::endl;
-                branches_[i]->value()=input(i);
-            }
-            mutex_lock rootLock(globalMutexForROOT_);
-            outputFile_->cd();
-            tree_->Fill();
-            //std::cout<<"writing entry: "<<tree_->GetEntries()<<std::endl;
+            int num_batches = input_tensor.dim_size(0);
+            int label_length = input_tensor.dim_size(1);
             
+            if (label_length!=branches_.size())
+            {
+                throw std::runtime_error("Mismatching tensor ("+std::to_string(label_length)+")  <-> branch length ("+std::to_string(branches_.size())+")");
+            }
+            for (unsigned int ibatch = 0; ibatch < num_batches; ++ibatch)
+            {
+                for (unsigned int i = 0; i < label_length; ++i)
+                {
+                    //std::cout<<"writing "<<branches_[i]->name()<<" = "<<input(i)<<std::endl;
+                    branches_[i]->value()=input(ibatch*label_length+i);
+                }
+                mutex_lock rootLock(globalMutexForROOT_);
+                outputFile_->cd();
+                tree_->Fill();
+            }
             
             const Tensor& write_tensor = context->input(1);
             auto write_flag = write_tensor.flat<int>();

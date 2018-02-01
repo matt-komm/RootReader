@@ -19,7 +19,6 @@ include_directories(${TensorFlow_INCLUDE_DIRS} ${ROOT_INCLUDE_DIR})
 add_library(RootReader
     MODULE
     RootReader.cc
-    BatchedTransformation.cc
 )
 target_link_libraries(RootReader ${TensorFlow_LIBRARY} ${ROOT_LIBRARIES})
 
@@ -41,6 +40,12 @@ add_library(TrainTestSplitting
 )
 target_link_libraries(TrainTestSplitting ${TensorFlow_LIBRARY} ${ROOT_LIBRARIES})
 
+add_library(Resampler
+    MODULE
+    Resampler.cc
+)
+target_link_libraries(Resampler ${TensorFlow_LIBRARY})
+
 
 add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0 -std=c++11)
 
@@ -58,4 +63,9 @@ copy_file_if_changed(
     ${CMAKE_SOURCE_DIR}/train_test_splitter.py
     ${CMAKE_CURRENT_BINARY_DIR}/train_test_splitter.py
     TrainTestSplitting
+)
+copy_file_if_changed(
+    ${CMAKE_SOURCE_DIR}/resampler.py
+    ${CMAKE_CURRENT_BINARY_DIR}/resampler.py
+    Resampler
 )

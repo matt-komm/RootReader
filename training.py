@@ -244,9 +244,9 @@ fileListTrain = []
 #filePathTrain = "/media/matthias/HDD/matthias/Analysis/LLP/training/samples/rootFiles.raw.txt"
 #filePathTrain = "/vols/cms/mkomm/LLP/samples/rootFiles_stripped2.txt"
 #filePathTrain = "/vols/cms/mkomm/LLP/samples2_split/rootFiles_b.txt"
-filePathTrain = "/vols/cms/mkomm/LLP/samples2_split/rootFiles_llp.txt"
+filePathTrain = "/vols/cms/mkomm/LLP/samples3_split_train_shuffle.txt"
 
-outputFolder = "llponly"
+outputFolder = "llponly_full"
 if os.path.exists(outputFolder):
     print "Warning: output folder '%s' already exists!"%outputFolder
 else:
@@ -255,8 +255,12 @@ else:
 
 f = open(filePathTrain)
 for l in f:
-    absPath = os.path.join(filePathTrain.rsplit('/',1)[0],l.replace("\n","").replace("\r","")+"")
-    fileListTrain.append(absPath)
+    if len(l.replace("\n","").replace("\r",""))>0:
+        absPath = os.path.join(filePathTrain.rsplit('/',1)[0],l.replace("\n","").replace("\r","")+"")
+    if os.path.exists(absPath):
+        fileListTrain.append(absPath)
+    else:
+        print "WARNING: file '"+absPath+"' does not exists -> skip!"
 f.close()
 print "files train ",len(fileListTrain)
 
@@ -287,18 +291,18 @@ featureDict = {
 
     "truth": {
         "branches":[
-            'isB/UInt_t',
-            'isBB/UInt_t',
-            'isGBB/UInt_t',
-            'isLeptonicB/UInt_t',
-            'isLeptonicB_C/UInt_t',
+            #'isB/UInt_t',
+            #'isBB/UInt_t',
+            #'isGBB/UInt_t',
+            #'isLeptonicB/UInt_t',
+            #'isLeptonicB_C/UInt_t',
             'isC/UInt_t',
             'isCC/UInt_t',
             'isGCC/UInt_t',
             'isUD/UInt_t',
             'isS/UInt_t',
             'isG/UInt_t',
-            'isUndefined/UInt_t',
+            #'isUndefined/UInt_t',
             'isFromLLgno/UInt_t',
             #'isFromLLgno_isB/UInt_t',
             #'isFromLLgno_isBB/UInt_t',
@@ -491,11 +495,9 @@ for label in featureDict["truth"]["branches"]:
     else:
         print " -> no entries found for class: ",branchName
         
-    if hist.GetEntries()>10000:
-        if branchName.find("isFromLLgno")==0:
-            targetShape.Add(hist,0.1) #lower impact of LLP
-        elif branchName.find("isB")==0 or branchName.find("isBB") or branchName.find("isLeptonicB")==0:
-            targetShape.Add(hist)
+
+    if label.find("isFromLLgno")==0:
+        targetShape.Add(hist)
     
     histsPerClass[branchName]=hist
 targetShape.Scale(1./targetShape.Integral())
@@ -577,11 +579,14 @@ def setupModel(batch):
     result["model"] = model
     
     return result
-
-for epoch in range(60):
+    
+for epoch in range(100):
     epoch_duration = time.time()
     print "epoch",epoch+1
     fileListQueue = tf.train.string_input_producer(fileListTrain, num_epochs=1, shuffle=True)
+    
+    def resample(tensor):
+        
 
     rootreader_op = []
     for _ in range(min(len(fileListTrain),6)):
@@ -590,7 +595,7 @@ for epoch in range(60):
         )
     
     
-    batchSize = 10000
+    batchSize = 2000
     minAfterDequeue = batchSize*2
     capacity = minAfterDequeue + 3*batchSize
     
@@ -621,14 +626,18 @@ for epoch in range(60):
             train_batch[l].shape
         )
     
+    #TODO: try to reuse variables
     model_test = setupModel(placeholder_test)
 
     #model.add_loss(loss)
     #model.compile(optimizer='rmsprop', loss=None)
     #model.summary()
     #train_op = tf.train.GradientDescentOptimizer(0.01).minimize(loss)
+    
+    learning_rate = tf.placeholder("float")
+
     train_op = tf.train.AdamOptimizer(
-        learning_rate=0.00001,
+        learning_rate=learning_rate,
         beta1=0.9,
         beta2=0.999,
         epsilon=1e-08,
@@ -668,6 +677,9 @@ for epoch in range(60):
         while not coord.should_stop():
             step += 1
             
+            
+            learning_rate_val = 0.0001*(0.8**(epoch+1.*step/math.floor(1.*nEntries/batchSize)))
+            
             #loss is calculated before weights are updated
             model_test["model"].set_weights(model_train["model"].get_weights()) 
             _,_, loss_train, accuracy_train,test_batch_value = sess.run([
@@ -675,9 +687,9 @@ for epoch in range(60):
                     model_train["weighted_loss"],model_train["accuracy"],
                     test_batch
                 ], 
-                    feed_dict={K.learning_phase(): 1}
+                    feed_dict={K.learning_phase(): 1, learning_rate:learning_rate_val}
             )
-            feed_dict = {K.learning_phase(): 0}
+            feed_dict = {K.learning_phase(): 0, learning_rate:learning_rate_val}
             for l in placeholder_test.keys():
                 feed_dict[placeholder_test[l]]=test_batch_value[l]
             loss_test, accuracy_test = sess.run([
@@ -697,7 +709,7 @@ for epoch in range(60):
                 
             if step % 10 == 0:
                 duration = (time.time() - start_time)/10.
-                print 'Step %d/%d: loss = %.2f (%.2f), accuracy = %.1f%% (%.1f%%), time = %.3f sec' % (step,math.floor(1.*nEntries/batchSize), loss_train,loss_test,accuracy_train*100.,accuracy_test*100.,duration)
+                print 'Step %d/%d: loss = %.2f (%.2f), accuracy = %.1f%% (%.1f%%), learning = %.3e, time = %.3f sec' % (step,math.floor(1.*nEntries/batchSize), loss_train,loss_test,accuracy_train*100.,accuracy_test*100.,learning_rate_val,duration)
                 start_time = time.time()
     except tf.errors.OutOfRangeError:
         print('Done training for %d steps.' % (step))

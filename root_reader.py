@@ -58,10 +58,11 @@ class root_reader():
     def raw(self):
         return {"raw":self._op_batch,"num":self._op_num}
         
-    def batch(self):
+    def batch(self,preprocess=lambda x:x):
         result = {}
+        op_batch_preprocessed = preprocess(self._op_batch)
         for featureName in sorted(self._output_formatters.keys()):
-            result[featureName]=self._output_formatters[featureName](self._op_batch)
+            result[featureName]=self._output_formatters[featureName](op_batch_preprocessed)
         result["num"] = self._op_num
         return result
         

@@ -29,7 +29,7 @@ from deepFlavour import model_deepFlavourReference
 
 fileList = []
 
-filePath = "/vols/cms/mkomm/LLP/samples/rootFiles_test_stripped.txt"
+filePath = "/vols/cms/mkomm/LLP/samples2_split2/rootFiles_test_llp.txt"
 #filePath = "/vols/cms/mkomm/LLP/samples/rootFiles_stripped2.txt"
 f = open(filePath)
 for l in f:
@@ -92,18 +92,19 @@ featureDict = {
             'isS/UInt_t',
             'isG/UInt_t',
             'isUndefined/UInt_t',
-            'isFromLLgno_isB/UInt_t',
-            'isFromLLgno_isBB/UInt_t',
-            'isFromLLgno_isGBB/UInt_t',
-            'isFromLLgno_isLeptonicB/UInt_t',
-            'isFromLLgno_isLeptonicB_C/UInt_t',
-            'isFromLLgno_isC/UInt_t',
-            'isFromLLgno_isCC/UInt_t',
-            'isFromLLgno_isGCC/UInt_t',
-            'isFromLLgno_isUD/UInt_t',
-            'isFromLLgno_isS/UInt_t',
-            'isFromLLgno_isG/UInt_t',
-            'isFromLLgno_isUndefined/UInt_t'
+            'isFromLLgno/UInt_t',
+            #'isFromLLgno_isB/UInt_t',
+            #'isFromLLgno_isBB/UInt_t',
+            #'isFromLLgno_isGBB/UInt_t',
+            #'isFromLLgno_isLeptonicB/UInt_t',
+            #'isFromLLgno_isLeptonicB_C/UInt_t',
+            #'isFromLLgno_isC/UInt_t',
+            #isFromLLgno_isCC/UInt_t',
+            #'isFromLLgno_isGCC/UInt_t',
+            #'isFromLLgno_isUD/UInt_t',
+            #'isFromLLgno_isS/UInt_t',
+            #'isFromLLgno_isG/UInt_t',
+            #'isFromLLgno_isUndefined/UInt_t'
         ],
         "multiplicity":None
     },
@@ -167,7 +168,6 @@ featureDict = {
     }
 }
 
-loss_mean = []
 
 for ifile,fileNameSizePair in enumerate(fileList):
     
@@ -176,7 +176,7 @@ for ifile,fileNameSizePair in enumerate(fileList):
     print ifile+1,"/",len(fileList),": ",fileName, "(",nevents,")"
     fileListQueue = tf.train.string_input_producer([fileName], num_epochs=1, shuffle=False)
 
-    rootreader_op = root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=1).batch()
+    rootreader_op = root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=100).batch()
     
     globalvars = keras.layers.Input(tensor=rootreader_op['globals'])
     cpf = keras.layers.Input(tensor=rootreader_op['Cpfcan'])
@@ -189,15 +189,24 @@ for ifile,fileNameSizePair in enumerate(fileList):
     nclasses = truth.shape.as_list()[1]
     print nclasses
     inputs = [globalvars,cpf,npf,vtx]
-    prediction = model_deepFlavourReference(inputs,nclasses,1,dropoutRate=0.1,momentum=0.6)
+    prediction = model_deepFlavourReference(
+        inputs,
+        nclasses,
+        1,
+        dropoutRate=0.1,
+        momentum=0.6,
+        batchnorm=True,
+        lstm=True
+    )
+
     loss = tf.reduce_sum(keras.losses.categorical_crossentropy(truth, prediction))
     accuracy,accuracy_op = tf.metrics.accuracy(tf.argmax(truth,1),tf.argmax(prediction,1))
     model = keras.Model(inputs=inputs, outputs=prediction)
     eval_labels = []
     for branch in featureDict["truth"]["branches"]:
         s = branch.rsplit("/",1)
-        eval_labels.append("eval_"+s[0]+"/"+s[1])
-    rootwriter_op, write_flag = root_writer(prediction,eval_labels,"evaluated",fileName+".friend").write()
+        eval_labels.append("eval_llp_"+s[0]+"/"+s[1])
+    rootwriter_op, write_flag = root_writer(prediction,eval_labels,"evaluated",fileName+".llp.friend").write()
     #init_op = tf.global_variables_initializer() #bug https://github.com/tensorflow/tensorflow/issues/1045
     init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 
@@ -210,12 +219,12 @@ for ifile,fileNameSizePair in enumerate(fileList):
     total_loss = 0
     
     print "loading weights ..."
-    model.load_weights("model_epoch40.hdf5") #use after init_op which initializes random weights!!!
+    model.load_weights("llponly/model_epoch50.hdf5") #use after init_op which initializes random weights!!!
     
     try:
         step = 0
         while not coord.should_stop():
-            step += 1
+            step += 100
             start_time = time.time()
 
             #TODO: figure out why setting training phase to 0 gives very wrong results (e.g. remove batchnorm layers)
@@ -244,7 +253,7 @@ for ifile,fileNameSizePair in enumerate(fileList):
             #print truth_value,truth_max
             #print truth_value,max_truth
             duration = time.time() - start_time
-            if step % 10000 == 0:
+            if step % 1000 == 0:
                 print 'Step %d: loss = %.2f, accuracy=%.1f%% (%.3f sec)' % (step, loss_value,accuracy_value*100.,duration)
             
             

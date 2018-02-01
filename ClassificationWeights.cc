@@ -19,17 +19,6 @@ REGISTER_OP("ClassificationWeights")
     {
         tensorflow::shape_inference::ShapeHandle label_shape =  c->input(0);
         int batch_dim = c->Value(c->Dim(label_shape,0));
-        //int label_length = c->Value(c->Dim(label_shape,1));
-        std::vector<std::string> histNames;
-        
-        //std::cout<<c->Rank(label_shape)<<","<<batch_dim<<","<<label_length<<std::endl;
-        TF_RETURN_IF_ERROR(c->GetAttr("histnames",&histNames));
-        /*
-        if (label_length!=histNames.size())
-        {
-            throw std::runtime_error("Labels ("+std::to_string(histNames.size())+") need to be of same size as tensor ("+std::to_string(label_length)+")");
-        }
-        */
         shape_inference::ShapeHandle s = c->MakeShape({batch_dim});
         c->set_output(0,s);
         return Status::OK();
@@ -53,6 +42,8 @@ class ClassificationWeightsOp:
         bool transpose_;
         std::vector<TH2F> hists;
         std::vector<int> varIndex;
+        
+        static mutex globalMutexForROOT_; //protects ROOT
     public:
         explicit ClassificationWeightsOp(OpKernelConstruction* context): 
             OpKernel(context)
@@ -69,6 +60,7 @@ class ClassificationWeightsOp:
                 context,
                 context->GetAttr("varindex",&varIndex)
             );
+            mutex_lock rootLock(globalMutexForROOT_);
             TFile rootFile(filePath.c_str());
             if (not rootFile.IsOpen ())
             {
@@ -137,6 +129,8 @@ class ClassificationWeightsOp:
             }
         }  
 };
+
+mutex ClassificationWeightsOp::globalMutexForROOT_;
 
 REGISTER_KERNEL_BUILDER(Name("ClassificationWeights").Device(DEVICE_CPU),ClassificationWeightsOp);
 

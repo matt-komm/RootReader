@@ -6,24 +6,23 @@ import sys
 import numpy
 from root_reader import root_reader
 from train_test_splitter import train_test_splitter
+from resampler import resampler
 
 classificationweights_module = tf.load_op_library('./libClassificationWeights.so')
-
 
 fileList = []
 
 #filePath = "/media/matthias/HDD/matthias/Analysis/LLP/training/samples/rootFiles.raw.txt"
-filePath = "/vols/cms/mkomm/LLP/samples/rootFiles_stripped2.txt"
+filePath = "/vols/cms/mkomm/LLP/samples3_split_train_shuffle.txt"
 
 f = open(filePath)
 for l in f:
     absPath = os.path.join(filePath.rsplit('/',1)[0],l.replace("\n","").replace("\r","")+"")
     fileList.append(absPath)
 f.close()
-print len(fileList)
-
+print len(fileList) 
 fileList = fileList[:6]
-
+print fileList
 
 
 featureDict = {
@@ -49,30 +48,31 @@ featureDict = {
 
     "truth": {
         "branches":[
-            'isB/UInt_t',
-            'isBB/UInt_t',
-            'isGBB/UInt_t',
-            'isLeptonicB/UInt_t',
-            'isLeptonicB_C/UInt_t',
+            #'isB/UInt_t',
+            #'isBB/UInt_t',
+            #'isGBB/UInt_t',
+            #'isLeptonicB/UInt_t',
+            #'isLeptonicB_C/UInt_t',
             'isC/UInt_t',
             'isCC/UInt_t',
             'isGCC/UInt_t',
             'isUD/UInt_t',
             'isS/UInt_t',
             'isG/UInt_t',
-            'isUndefined/UInt_t',
-            'isFromLLgno_isB/UInt_t',
-            'isFromLLgno_isBB/UInt_t',
-            'isFromLLgno_isGBB/UInt_t',
-            'isFromLLgno_isLeptonicB/UInt_t',
-            'isFromLLgno_isLeptonicB_C/UInt_t',
-            'isFromLLgno_isC/UInt_t',
-            'isFromLLgno_isCC/UInt_t',
-            'isFromLLgno_isGCC/UInt_t',
-            'isFromLLgno_isUD/UInt_t',
-            'isFromLLgno_isS/UInt_t',
-            'isFromLLgno_isG/UInt_t',
-            'isFromLLgno_isUndefined/UInt_t'
+            'isFromLLgno/UInt_t',
+            #'isUndefined/UInt_t',
+            #'isFromLLgno_isB/UInt_t',
+            #'isFromLLgno_isBB/UInt_t',
+            #'isFromLLgno_isGBB/UInt_t',
+            #'isFromLLgno_isLeptonicB/UInt_t',
+            #'isFromLLgno_isLeptonicB_C/UInt_t',
+            #'isFromLLgno_isC/UInt_t',
+            #'isFromLLgno_isCC/UInt_t',
+            #'isFromLLgno_isGCC/UInt_t',
+            #'isFromLLgno_isUD/UInt_t',
+            #'isFromLLgno_isS/UInt_t',
+            #'isFromLLgno_isG/UInt_t',
+            #'isFromLLgno_isUndefined/UInt_t'
         ],
     },
     "globals": {
@@ -134,71 +134,58 @@ featureDict = {
 }
 '''
 
+outputFolder = os.getcwd()
+
 histsPerClass = {}
 weightsPerClass = {}
 chain = ROOT.TChain("deepntuplizer/tree")
 for f in fileList:
     chain.AddFile(f)
+nEntries = chain.GetEntries()
+print "total entries",nEntries
 
-binning = numpy.logspace(1.5,3,num=20)
-targetShape = ROOT.TH1F("ptTarget","",len(binning)-1,binning)
+
+binningPt = numpy.logspace(1.6,3,num=20)
+binningEta = numpy.linspace(-2.4,2.4,num=10)
+targetShape = ROOT.TH2F("ptetaTarget","",len(binningPt)-1,binningPt,len(binningEta)-1,binningEta)
+branchNameList = []
 for label in featureDict["truth"]["branches"]:
     branchName = label.split("/")[0]
+    branchNameList.append(branchName)
     print "projecting ... ",branchName
-    hist = ROOT.TH1F("pt"+branchName,"",len(binning)-1,binning)
+    hist = ROOT.TH2F("pteta"+branchName,"",len(binningPt)-1,binningPt,len(binningEta)-1,binningEta)
     hist.Sumw2()
     #hist.SetDirectory(0)
-    chain.Project(hist.GetName(),"jet_pt","("+branchName+"==1)")
+    chain.Project(hist.GetName(),"jet_eta:jet_pt","("+branchName+"==1)")
+    
+    targetShape.Add(hist)
     if hist.Integral()>0:
+        print " -> entries ",hist.GetEntries()
         hist.Scale(1./hist.Integral())
     else:
-        print "no entries found for class: ",branchName
+        print " -> no entries found for class: ",branchName
         
-    if branchName.find("isFromLLgno")==0:
-        targetShape.Add(hist,0.1) #lower impact of LLP
-    if branchName.find("isB")==0 or branchName.find("isBB")==0:
-        targetShape.Add(hist)
+    
     
     histsPerClass[branchName]=hist
 targetShape.Scale(1./targetShape.Integral())
 
-for label in histsPerClass.keys():
+for label in branchNameList:
     hist = histsPerClass[label]
     if (hist.Integral()>0):
-        weight = targetShape.Clone("weight_"+label)
+        weight = targetShape.Clone(label)
         weight.Scale(1) #can use arbitrary scale here to make weight more reasonable
         weight.Divide(hist)
         weightsPerClass[label]=weight
     else:
-        weightsPerClass[label]=hist
-
-cv = ROOT.TCanvas("cv","",800,600)
-cv.SetLogx(1)
-ymax = max(map(lambda h: h.GetMaximum(),histsPerClass.values()))
-axis = ROOT.TH2F("axis",";pt;",50,binning[0],binning[-1],50,0,ymax*1.1)
-axis.Draw("AXIS")
-targetShape.SetLineWidth(3)
-targetShape.SetLineColor(ROOT.kRed)
-targetShape.Draw("SameHISTL")
-for label in histsPerClass.keys():
-    histsPerClass[label].Draw("SameHISTL")
-cv.Update()
-cv.Print("pt.pdf")
-
-weightFile = ROOT.TFile("weights.root","RECREATE")
-cvWeight = ROOT.TCanvas("cv2","",800,600)
-cvWeight.SetLogy(1)
-cvWeight.SetLogx(1)
-axisvWeight = ROOT.TH2F("axis2",";pt;",50,binning[0],binning[-1],50,0.1,150)
-axisvWeight.Draw("AXIS")
-histNames = []
-for label in weightsPerClass.keys():
-    weightsPerClass[label].Draw("SameHISTL")
-    weightsPerClass[label].Write()
-    histNames.append(weightsPerClass[label].GetName())
-    
-cvWeight.Update()
-cvWeight.Print("pt_weight.pdf")
+        weight = targetShape.Clone(label)
+        weight.Scale(0)
+        weightsPerClass[label]=weight
+        
+weightFile = ROOT.TFile(os.path.join(outputFolder,"weights.root"),"RECREATE")
+for l,h in weightsPerClass.items():
+    print h
+    h.Write()
 weightFile.Close()
 
 
@@ -206,9 +193,30 @@ for epoch in range(1):
     print "epoch",epoch+1
     fileListQueue = tf.train.string_input_producer(fileList, num_epochs=1, shuffle=True)
 
-    rootreader_op = [
-        root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=100).batch() for _ in range(1)
-    ]
+    rootreader_op = []
+    weights = []
+    resamplers = []
+    
+    for _ in range(1):
+        reader = root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=10).batch()
+        rootreader_op.append(reader)
+
+        weight = classificationweights_module.classification_weights(
+            reader["truth"],
+            reader["globals"],
+            "weights.root",
+            branchNameList,
+            [0,1]
+        )
+        weights.append(weight)
+        
+        resampled = resampler(
+            weight,
+            reader
+        ).resample()
+        resamplers.append(resampled)
+        
+        
     
     batchSize = 10
     minAfterDequeue = batchSize*2
@@ -218,23 +226,14 @@ for epoch in range(1):
     #for online resampling for equal pt/eta weights
     trainingBatch = tf.train.batch_join(
     #trainingBatch = tf.train.shuffle_batch_join(
-        rootreader_op, 
+        resamplers, 
         batch_size=batchSize, 
         capacity=capacity,
         #min_after_dequeue=minAfterDequeue,
         enqueue_many=True #requires to read examples in batches!
     )
     #trainingBatch["num"]=tf.sign(tf.mod(trainingBatch["num"],tf.constant(10,shape=trainingBatch["num"].get_shape())))
-    print trainingBatch
-    print "labels",len(histNames)
-    weights = classificationweights_module.classification_weights(
-        trainingBatch["truth"],
-        trainingBatch["globals"],
-        "weights.root",
-        histNames,
-        0
-    )
-    print weights
+    
 
     train_test_split = train_test_splitter(
         trainingBatch["num"],
@@ -266,16 +265,12 @@ for epoch in range(1):
             t = time.time()
             #result = sess.run([trainingBatch,jet_pt,weights,tf.argmax(trainingBatch["truth"],axis=1)])
             result = sess.run([
-                tf.map_fn(lambda x: x[0],train_test_split.train()["globals"]),
-                tf.map_fn(lambda x: x[0],train_test_split.test()["globals"]),
-                tf.map_fn(lambda x: x[0],trainingBatch["globals"])
+                trainingBatch
             ])
             t = time.time()-t
             print "-- step %3i (%8.3fs) --"%(steps,t)
             
-            print "train",result[0]
-            print "test",result[1]
-            print "all",result[2]
+            print "train",result
             print
             '''
             if steps%1==0:
@@ -294,4 +289,6 @@ for epoch in range(1):
 
     coord.request_stop()
     coord.join(threads)
+    
+    sess.close()
 

@@ -201,11 +201,17 @@ def loadFile(path):
     epoch = []
     loss_train = []
     loss_test = []
+    i = 0
     for l in f:
-        l=l.split(";")
-        epoch.append(float(l[0]))
-        loss_train.append(float(l[1]))
-        loss_test.append(float(l[2]))
+        l=l.split(" ")
+        epoch.append(i+1.)
+        i+=1
+        
+        #epoch.append(float(l[0]))
+        loss_train.append(float(l[0]))
+        loss_test.append(float(l[1]))
+        if i>17:
+            break
     epoch = numpy.array(epoch)
     loss_train = numpy.array(loss_train)
     loss_test = numpy.array(loss_test)
@@ -225,15 +231,17 @@ def drawLoss(training,color,legend,title):
     graph2.SetLineStyle(2)
     graph2.Draw("L")
     rootObj.append(graph2)
-    legend.AddEntry(graph2,title+" (test)","L")
+    legend.AddEntry(graph2,title+" (val.)","L")
         
-training = loadFile("model_alt3_epoch.stat")
+#training = loadFile("llponly/model_epoch.stat")
 #training_alt = loadFile("model_alt_epoch.stat")
 #training_alt2 = loadFile("model_alt2_epoch.stat")
 
+training = loadFile("losses.log")
+
 cv = ROOT.TCanvas("cv","",900,700)
-cv.SetLogy(1)
-axis = ROOT.TH2F("axis",";Epoch;Loss",50,0,30,50,1,2)
+#cv.SetLogy(1)
+axis = ROOT.TH2F("axis",";Epoch;Loss",50,0,20,50,0.5,2.5)
 axis.Draw("AXIS")
 cv.SetRightMargin(0.35)
 legend = ROOT.TLegend(0.66,1-cv.GetTopMargin(),0.99,1-cv.GetTopMargin()-2*0.06)
@@ -242,7 +250,7 @@ legend.SetFillColor(ROOT.kWhite)
 legend.SetTextFont(43)
 legend.SetTextSize(22*cvscale*fontScale)
 
-drawLoss(training,ROOT.kAzure+4,legend,"batch & drop")
+drawLoss(training,ROOT.kAzure+4,legend,"")
 #drawLoss(training_alt,ROOT.kOrange+7,legend,"!batch & drop")
 #drawLoss(training_alt2,ROOT.kTeal+9,legend,"!batch & !drop")
 legend.Draw("Same")
