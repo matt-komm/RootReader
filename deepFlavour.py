@@ -128,15 +128,36 @@ def model_deepFlavourReference(Inputs,nclasses,nregclasses,dropoutRate=0.1,momen
 
     with tf.name_scope('lstm'):
         if lstm:
-            cpf  = LSTM(150,go_backwards=True,implementation=2)(cpf)
+            cpf  = LSTM(150,
+                go_backwards=True,
+                implementation=2,
+                #dropout=dropoutRate,
+                #recurrent_dropout=dropoutRate**1.5,
+                #activation='relu',
+                #recurrent_activation='relu'
+            )(cpf)
             cpf=BatchNormalization(momentum=momentum)(cpf)
             cpf = Dropout(dropoutRate)(cpf)
 
-            npf = LSTM(50,go_backwards=True,implementation=2)(npf)
+            npf = LSTM(50,
+                go_backwards=True,
+                implementation=2,
+                #dropout=dropoutRate,
+                #recurrent_dropout=dropoutRate**1.5,
+                #activation='relu',
+                #recurrent_activation='relu'
+            )(npf)
             npf=BatchNormalization(momentum=momentum)(npf)
             npf = Dropout(dropoutRate)(npf)
 
-            vtx = LSTM(50,go_backwards=True,implementation=2)(vtx)
+            vtx = LSTM(50,
+                go_backwards=True,
+                implementation=2,
+                #dropout=dropoutRate,
+                #recurrent_dropout=dropoutRate**1.5,
+                #activation='relu',
+                #recurrent_activation='relu'
+            )(vtx)
             vtx=BatchNormalization(momentum=momentum)(vtx)
             vtx = Dropout(dropoutRate)(vtx)
         else:

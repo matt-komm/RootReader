@@ -6,11 +6,10 @@ class root_reader():
     @staticmethod
     def slice_and_reshape(start,size,shape=None):
         if shape==None:
-            return lambda tensor: rootreader_module.batched_transformation(tensor,start,size)
+            return lambda tensor: tensor[:,start:start+size]
         else:
-            #return lambda tensor: tf.map_fn(lambda x: tf.transpose(tf.reshape(tf.slice(x,[start],[size]),shape)),tensor,back_prop=False,infer_shape=True)
-            return lambda tensor: rootreader_module.batched_transformation(tensor,start,size,shape=shape,transpose=True)
-            
+            return lambda tensor: tf.transpose(tf.reshape(tensor[:,start:start+size],shape=shape),perm=[0,2,1])
+        
     def __init__(self,
         queue,
         feature_dict,
@@ -38,7 +37,7 @@ class root_reader():
                 self._output_formatters[feature_name]=root_reader.slice_and_reshape(
                     index,
                     len(feature_values["branches"])*feature_values["max"],
-                    [len(feature_values["branches"]),feature_values["max"]]
+                    [-1,len(feature_values["branches"]),feature_values["max"]]
                 )
                 index+=len(feature_values["branches"])*feature_values["max"]
                 for branch_name in feature_values["branches"]:

@@ -9,16 +9,15 @@ import math
 import sys
 from root_reader import root_reader
 from train_test_splitter import train_test_splitter
+from resampler import resampler
 
 cvscale = 1.0
 
 fontScale = 750./650.
 
-ROOT.gROOT.Reset()
 ROOT.gROOT.SetBatch(True)
 ROOT.gStyle.SetOptStat(0)
 ROOT.gStyle.SetOptFit(0)
-ROOT.gROOT.Reset()
 ROOT.gROOT.SetStyle("Plain")
 ROOT.gStyle.SetOptStat(0)
 ROOT.gStyle.SetOptFit(1111)
@@ -246,7 +245,7 @@ fileListTrain = []
 #filePathTrain = "/vols/cms/mkomm/LLP/samples2_split/rootFiles_b.txt"
 filePathTrain = "/vols/cms/mkomm/LLP/samples3_split_train_shuffle.txt"
 
-outputFolder = "llponly_full"
+outputFolder = "llponly_fast"
 if os.path.exists(outputFolder):
     print "Warning: output folder '%s' already exists!"%outputFolder
 else:
@@ -264,7 +263,7 @@ for l in f:
 f.close()
 print "files train ",len(fileListTrain)
 
-#fileListTrain = fileListTrain[:5]+fileListTrain[-5:]
+#fileListTrain = fileListTrain[:2]#+fileListTrain[-5:]
 
 #print fileList
 
@@ -302,8 +301,8 @@ featureDict = {
             'isUD/UInt_t',
             'isS/UInt_t',
             'isG/UInt_t',
-            #'isUndefined/UInt_t',
             'isFromLLgno/UInt_t',
+            #'isUndefined/UInt_t',
             #'isFromLLgno_isB/UInt_t',
             #'isFromLLgno_isBB/UInt_t',
             #'isFromLLgno_isGBB/UInt_t',
@@ -481,6 +480,8 @@ binningPt = numpy.logspace(1.6,3,num=20)
 binningEta = numpy.linspace(-2.4,2.4,num=10)
 targetShape = ROOT.TH2F("ptetaTarget","",len(binningPt)-1,binningPt,len(binningEta)-1,binningEta)
 branchNameList = []
+eventsPerLabel = {}
+targetEvents = 0
 for label in featureDict["truth"]["branches"]:
     branchName = label.split("/")[0]
     branchNameList.append(branchName)
@@ -489,16 +490,17 @@ for label in featureDict["truth"]["branches"]:
     hist.Sumw2()
     #hist.SetDirectory(0)
     chain.Project(hist.GetName(),"jet_eta:jet_pt","("+branchName+"==1)")
+    
+    if label.find("isFromLLgno")>=0:
+        targetShape.Add(hist)
+        targetEvents+=hist.GetEntries()
     if hist.Integral()>0:
         print " -> entries ",hist.GetEntries()
+        eventsPerLabel[branchName]=hist.GetEntries()
         hist.Scale(1./hist.Integral())
     else:
         print " -> no entries found for class: ",branchName
         
-
-    if label.find("isFromLLgno")==0:
-        targetShape.Add(hist)
-    
     histsPerClass[branchName]=hist
 targetShape.Scale(1./targetShape.Integral())
 
@@ -506,11 +508,15 @@ for label in branchNameList:
     hist = histsPerClass[label]
     if (hist.Integral()>0):
         weight = targetShape.Clone(label)
-        weight.Scale(1) #can use arbitrary scale here to make weight more reasonable
         weight.Divide(hist)
+        if weight.GetMaximum()>0:
+            print "rescale ",label,1./(weight.GetMaximum())
+            weight.Scale(1./weight.GetMaximum()) #ensure no crazy oversampling
         weightsPerClass[label]=weight
     else:
-        weightsPerClass[label]=hist
+        weight = targetShape.Clone(label)
+        weight.Scale(0)
+        weightsPerClass[label]=weight
         
 weightFile = ROOT.TFile(os.path.join(outputFolder,"weights.root"),"RECREATE")
 for l,h in weightsPerClass.items():
@@ -545,14 +551,7 @@ def setupModel(batch):
     truth = batch["truth"]
     genPt = batch["gen"][:,1]
 
-    weights = classificationweights_module.classification_weights(
-        batch["truth"],
-        batch["globals"],
-        os.path.join(outputFolder,"weights.root"),
-        branchNameList,
-        [0,1]
-    )
-    result["weights"]=weights
+
     #weights_sum = tf.reduce_mean(weights)
     #weights = tf.divide(weights,weights_sum)
 
@@ -565,14 +564,12 @@ def setupModel(batch):
         dropoutRate=0.1,
         momentum=0.6,
         batchnorm=True,
-        lstm=True
+        lstm=False
     )
     result["prediction"] = prediction
     cross_entropy = keras.losses.categorical_crossentropy(truth, prediction)
-    weighted_loss = tf.reduce_mean(tf.multiply(cross_entropy,weights))
-    result["weighted_loss"] = weighted_loss
-    unweighted_loss = tf.reduce_mean(cross_entropy)
-    result["unweighted_loss"] = unweighted_loss
+    weighted_loss = tf.reduce_mean(cross_entropy)
+    result["loss"] = weighted_loss
     accuracy,accuracy_op = tf.metrics.accuracy(tf.argmax(truth,1),tf.argmax(prediction,1))
     result["accuracy"] = accuracy_op
     model = keras.Model(inputs=inputs, outputs=prediction)
@@ -583,39 +580,46 @@ def setupModel(batch):
 for epoch in range(100):
     epoch_duration = time.time()
     print "epoch",epoch+1
-    fileListQueue = tf.train.string_input_producer(fileListTrain, num_epochs=1, shuffle=True)
-    
-    def resample(tensor):
-        
 
-    rootreader_op = []
-    for _ in range(min(len(fileListTrain),6)):
-        rootreader_op.append(
-            root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=100).batch() 
+    with tf.device('/cpu:0'):
+        fileListQueue = tf.train.string_input_producer(fileListTrain, num_epochs=1, shuffle=True)
+
+        rootreader_op = []
+        resamplers = []
+        for _ in range(min(len(fileListTrain),6)):
+            reader = root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=100).batch() 
+            rootreader_op.append(reader)
+            weight = classificationweights_module.classification_weights(
+                reader["truth"],
+                reader["globals"],
+                os.path.join(outputFolder,"weights.root"),
+                branchNameList,
+                [0,1]
+            )
+            resampled = resampler(
+                weight,
+                reader
+            ).resample()
+            resamplers.append(resampled)
+        
+        batchSize = 10000
+        minAfterDequeue = batchSize*2
+        capacity = minAfterDequeue + 3*batchSize
+        
+        batch = tf.train.shuffle_batch_join(
+            resamplers, 
+            batch_size=batchSize, 
+            capacity=capacity,
+            min_after_dequeue=minAfterDequeue,
+            enqueue_many=True #requires to read examples in batches!
         )
-    
-    
-    batchSize = 2000
-    minAfterDequeue = batchSize*2
-    capacity = minAfterDequeue + 3*batchSize
-    
-    #check: tf.contrib.training.stratified_sample
-    #for online resampling for equal pt/eta weights
-    #trainingBatch = tf.train.batch_join(
-    batch = tf.train.shuffle_batch_join(
-        rootreader_op, 
-        batch_size=batchSize, 
-        capacity=capacity,
-        min_after_dequeue=minAfterDequeue,
-        enqueue_many=True #requires to read examples in batches!
-    )
-    train_test_split = train_test_splitter(
-        batch["num"],
-        batch,
-        percentage=10
-    )
-    train_batch = train_test_split.train()
-    test_batch = train_test_split.test()
+        train_test_split = train_test_splitter(
+            batch["num"],
+            batch,
+            percentage=10
+        )
+        train_batch = train_test_split.train()
+        test_batch = train_test_split.test()
 
     model_train = setupModel(train_batch)
     
@@ -644,7 +648,7 @@ for epoch in range(100):
         use_locking=True,
         name='Adam'
     ).minimize(
-        model_train["weighted_loss"]
+        model_train["loss"]
     )
 
 
@@ -672,19 +676,22 @@ for epoch in range(100):
     nTrain = 0
     nTest = 0
     start_time = time.time()
+    
+    testingHist = ROOT.TH2F("pteta",";pt;eta",len(binningPt)-1,binningPt,len(binningEta)-1,binningEta)
+    
     try:
         step = 0
         while not coord.should_stop():
             step += 1
             
             
-            learning_rate_val = 0.0001*(0.8**(epoch+1.*step/math.floor(1.*nEntries/batchSize)))
+            learning_rate_val = 0.0001*(0.85**(1.*epoch))
             
             #loss is calculated before weights are updated
             model_test["model"].set_weights(model_train["model"].get_weights()) 
-            _,_, loss_train, accuracy_train,test_batch_value = sess.run([
+            _,_,loss_train, accuracy_train,test_batch_value = sess.run([
                     train_op, model_train["model"].updates,
-                    model_train["weighted_loss"],model_train["accuracy"],
+                    model_train["loss"],model_train["accuracy"],
                     test_batch
                 ], 
                     feed_dict={K.learning_phase(): 1, learning_rate:learning_rate_val}
@@ -693,7 +700,7 @@ for epoch in range(100):
             for l in placeholder_test.keys():
                 feed_dict[placeholder_test[l]]=test_batch_value[l]
             loss_test, accuracy_test = sess.run([
-                    model_test["weighted_loss"],model_test["accuracy"]
+                    model_test["loss"],model_test["accuracy"]
                 ], 
                     feed_dict=feed_dict
             )
@@ -709,7 +716,7 @@ for epoch in range(100):
                 
             if step % 10 == 0:
                 duration = (time.time() - start_time)/10.
-                print 'Step %d/%d: loss = %.2f (%.2f), accuracy = %.1f%% (%.1f%%), learning = %.3e, time = %.3f sec' % (step,math.floor(1.*nEntries/batchSize), loss_train,loss_test,accuracy_train*100.,accuracy_test*100.,learning_rate_val,duration)
+                print 'Step %d/~%d: loss = %.2f (%.2f), accuracy = %.1f%% (%.1f%%), learning = %.3e, time = %.3f sec' % (step,math.floor(1.*nEntries/batchSize),loss_train,loss_test,accuracy_train*100.,accuracy_test*100.,learning_rate_val,duration)
                 start_time = time.time()
     except tf.errors.OutOfRangeError:
         print('Done training for %d steps.' % (step))

@@ -57,7 +57,6 @@ class ResamplerOp:
         {
             if (not generator_)
             {
-                std::cout<<"create generator"<<std::endl;
                 generator_.reset(new std::mt19937(123456)); 
                 //note: one cannot enforce order in which compute is called per batch
             }
