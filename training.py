@@ -245,7 +245,7 @@ fileListTrain = []
 #filePathTrain = "/vols/cms/mkomm/LLP/samples2_split/rootFiles_b.txt"
 filePathTrain = "/vols/cms/mkomm/LLP/samples3_split_train_shuffle.txt"
 
-outputFolder = "llponly_fast"
+outputFolder = "llponly_test"
 if os.path.exists(outputFolder):
     print "Warning: output folder '%s' already exists!"%outputFolder
 else:
@@ -263,7 +263,7 @@ for l in f:
 f.close()
 print "files train ",len(fileListTrain)
 
-#fileListTrain = fileListTrain[:2]#+fileListTrain[-5:]
+fileListTrain = fileListTrain[:10]#+fileListTrain[-5:]
 
 #print fileList
 
@@ -511,7 +511,7 @@ for label in branchNameList:
         weight.Divide(hist)
         if weight.GetMaximum()>0:
             print "rescale ",label,1./(weight.GetMaximum())
-            weight.Scale(1./weight.GetMaximum()) #ensure no crazy oversampling
+            #weight.Scale(1./weight.GetMaximum()) #ensure no crazy oversampling
         weightsPerClass[label]=weight
     else:
         weight = targetShape.Clone(label)
@@ -602,7 +602,7 @@ for epoch in range(100):
             ).resample()
             resamplers.append(resampled)
         
-        batchSize = 10000
+        batchSize = 2000
         minAfterDequeue = batchSize*2
         capacity = minAfterDequeue + 3*batchSize
         
@@ -616,7 +616,7 @@ for epoch in range(100):
         train_test_split = train_test_splitter(
             batch["num"],
             batch,
-            percentage=10
+            percentage=30
         )
         train_batch = train_test_split.train()
         test_batch = train_test_split.test()
@@ -677,15 +677,25 @@ for epoch in range(100):
     nTest = 0
     start_time = time.time()
     
-    testingHist = ROOT.TH2F("pteta",";pt;eta",len(binningPt)-1,binningPt,len(binningEta)-1,binningEta)
-    
+    testingHists = {}
+    for i in range(len(branchNameList)):
+        testingHists[i]=ROOT.TH2F(
+            "etapt"+str(i),";pt;eta",
+            len(binningPt)-1,
+            binningPt,
+            len(binningEta)-1,
+            binningEta
+        )
+        
+     
+    learning_rate_val = 0.0001*(0.85**(1.*epoch))
     try:
         step = 0
         while not coord.should_stop():
             step += 1
             
             
-            learning_rate_val = 0.0001*(0.85**(1.*epoch))
+            
             
             #loss is calculated before weights are updated
             model_test["model"].set_weights(model_train["model"].get_weights()) 
@@ -696,6 +706,13 @@ for epoch in range(100):
                 ], 
                     feed_dict={K.learning_phase(): 1, learning_rate:learning_rate_val}
             )
+            if epoch==0:
+                for ibatch in range(len(test_batch_value["truth"])):
+                    testingHists[numpy.argmax(test_batch_value["truth"][ibatch])].Fill(
+                        test_batch_value["globals"][ibatch][0],
+                        test_batch_value["globals"][ibatch][1],
+                    )
+            
             feed_dict = {K.learning_phase(): 0, learning_rate:learning_rate_val}
             for l in placeholder_test.keys():
                 feed_dict[placeholder_test[l]]=test_batch_value[l]
@@ -716,7 +733,7 @@ for epoch in range(100):
                 
             if step % 10 == 0:
                 duration = (time.time() - start_time)/10.
-                print 'Step %d/~%d: loss = %.2f (%.2f), accuracy = %.1f%% (%.1f%%), learning = %.3e, time = %.3f sec' % (step,math.floor(1.*nEntries/batchSize),loss_train,loss_test,accuracy_train*100.,accuracy_test*100.,learning_rate_val,duration)
+                print 'Step %d/~%d: loss = %.2f (%.2f), accuracy = %.1f%% (%.1f%%), time = %.3f sec' % (step,math.floor(1.*nEntries/batchSize),loss_train,loss_test,accuracy_train*100.,accuracy_test*100.,duration)
                 start_time = time.time()
     except tf.errors.OutOfRangeError:
         print('Done training for %d steps.' % (step))
@@ -726,6 +743,7 @@ for epoch in range(100):
     avgLoss_test = total_loss_test/nTest
     print "Training/Testing = %i/%i, Testing rate = %4.1f%%"%(nTrain,nTest,100.*nTest/(nTrain+nTest))
     print "Average loss = %.2f (%.2f)"%(avgLoss_train,avgLoss_test)
+    print "Learning rate = = %.3e"%(learning_rate_val)
     f = open(os.path.join(outputFolder,"model_epoch.stat"),"a")
     f.write(str(epoch)+";"+str(avgLoss_train)+";"+str(avgLoss_test)+";"+str(accuracy_train*100.)+";"+str(accuracy_test*100.)+"\n")
     f.close()
@@ -733,6 +751,38 @@ for epoch in range(100):
     coord.join(threads)
     K.clear_session()
     
+    cvpt = ROOT.TCanvas("cvpt","",800,700)
+    cvpt.SetLogx(1)
+    axispt = ROOT.TH2F("axispt",";pt;au",50,binningPt[0],binningPt[-1],50,0,0.15)
+    axispt.Draw("AXIS")
+    hists = []
+    for i in range(len(branchNameList)):
+        hist.Scale(1./hist.Integral())
+        
+        #testingHists[i].Draw("colztext")
+        hist = testingHists[i].ProjectionX()
+        hist.Scale(1./hist.Integral())
+        hist.SetLineWidth(i+1)
+        hist.Draw("HISTSameL")
+        hists.append(hist)
+    cvpt.Print(os.path.join(outputFolder,"test_pt.pdf"))
+    
+    cveta = ROOT.TCanvas("cveta","",800,700)
+    cveta.SetLogx(1)
+    axiseta = ROOT.TH2F("axiseta",";pt;au",50,binningEta[0],binningEta[-1],50,0,0.15)
+    axiseta.Draw("AXIS")
+    hists = []
+    for i in range(len(branchNameList)):
+        hist.Scale(1./hist.Integral())
+        
+        #testingHists[i].Draw("colztext")
+        hist = testingHists[i].ProjectionY()
+        hist.Scale(1./hist.Integral())
+        hist.SetLineWidth(i+1)
+        hist.Draw("HISTSameL")
+        hists.append(hist)
+    cveta.Print(os.path.join(outputFolder,"test_eta.pdf"))
+       
     
     
     
