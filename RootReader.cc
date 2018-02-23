@@ -65,6 +65,7 @@ REGISTER_OP("RootReader")
 #include "TFile.h"
 #include "TTree.h"
 #include "TLeaf.h"
+#include "TTreeFormula.h"
 
 #include <vector>
 #include <memory>
@@ -82,15 +83,22 @@ class RootReaderOp:
         {
             protected:
                 string name_;
+                string expr_;
             public:
-                TensorFiller(const string& name):
-                    name_(name)
+                TensorFiller(const string& name, const string& expr):
+                    name_(name),
+                    expr_(expr)
                 {
                 }
                 
                 inline const string name() const
                 {
                     return name_;
+                }
+                
+                inline const string expr() const
+                {
+                    return expr_;
                 }
                 
                 static OUT resetNanOrInf(const OUT& v, const OUT& reset)
@@ -113,14 +121,14 @@ class RootReaderOp:
         {
             private:
                 unsigned int size_;
-                TLeaf* leaf_;
+                std::unique_ptr<TTreeFormula> formula_;
             public:
                 typedef TensorFiller<OUT> Base;
             
-                TensorFillerTmpl(const string& name, unsigned int size):
-                    TensorFiller<OUT>(name),
+                TensorFillerTmpl(const string& name, const string& expr, unsigned int size):
+                    TensorFiller<OUT>(name,expr),
                     size_(size),
-                    leaf_(nullptr)
+                    formula_(nullptr)
                 {
                 }
                 
@@ -130,28 +138,21 @@ class RootReaderOp:
                 
                 virtual void setBranchAddress(TTree* tree)
                 {
-                    TBranch* rootBranch = tree->GetBranch(Base::name().c_str());
-                    if(not rootBranch)
+                    formula_.reset(new TTreeFormula(Base::name().c_str(),Base::expr().c_str(),tree));
+                    
+                    if(not formula_)
                     {
-                        throw std::runtime_error("No branch with name '"+Base::name()+"' found");
+                        throw std::runtime_error("Cannot parse equation '"+Base::expr()+"'");
                     }
-                    if (rootBranch->GetNleaves()!=1)
-                    {
-                        throw std::runtime_error("Branch with name '"+Base::name()+"' contains multiple leafs");
-                    }
-                    leaf_ = dynamic_cast<TLeaf*>(rootBranch->GetListOfLeaves()->At(0));
-                    if (not leaf_)
-                    {
-                        throw std::runtime_error("Could not retrive leaf from branch with name '"+Base::name()+"'");
-                    }
+                    formula_->SetQuickLoad(true);
                 }
                 
                 virtual unsigned int fillTensor(typename TTypes<OUT>::Flat& flatTensor, unsigned int index, const OUT& reset) const
                 {
-                    unsigned int leafSize = leaf_->GetLen();
-                    for (unsigned int i = 0; i < std::min(leafSize,size_); ++i)
+                    unsigned int leafSize = formula_->GetNdata(); //needs to be called; otherwise elements >0 are set to 0
+                    for (unsigned int i = 0; i < std::min<unsigned int>(leafSize,size_); ++i)
                     {
-                        flatTensor(index+i)=Base::resetNanOrInf(leaf_->GetValue(i),reset);
+                        flatTensor(index+i)=Base::resetNanOrInf(formula_->EvalInstance(i),reset);
                     }
                     for (unsigned int i = std::min(leafSize,size_); i < size_; ++i)
                     {
@@ -205,14 +206,19 @@ class RootReaderOp:
                 context,
                 context->GetAttr("batch",&nBatch_)
             );
-            for (auto& name: branchNames)
+            for (unsigned int iname = 0; iname < branchNames.size(); ++iname)
             {
+                const string& name = branchNames[iname];
                 if (not syntax_test::isArray(name))
                 {
                     auto it = std::find(name.begin(),name.end(),'/');
                     if (it==name.end())
                     {
-                        tensorFillers_.emplace_back(std::make_shared<TensorFillerTmpl<float>>(name,1));
+                        tensorFillers_.emplace_back(std::make_shared<TensorFillerTmpl<float>>(
+                            "expr_"+std::to_string(iname),
+                            name,
+                            1
+                        ));
                         size_+=1;
                     }
                     else
@@ -221,7 +227,11 @@ class RootReaderOp:
                         if (type=="UInt_t")
                         {
 
-                            tensorFillers_.emplace_back(std::make_shared<TensorFillerTmpl<unsigned int, float>>(string(name.begin(),it),1));
+                            tensorFillers_.emplace_back(std::make_shared<TensorFillerTmpl<unsigned int, float>>(
+                                "expr_"+std::to_string(iname),
+                                string(name.begin(),it),
+                                1
+                            ));
                             size_+=1;
                         }
                     }
@@ -234,7 +244,11 @@ class RootReaderOp:
                     unsigned int size = std::stol(std::string(p1+1,p2));
                     size_+=size;
                     tensorFillers_.emplace_back(
-                        std::make_shared<TensorFillerTmpl<float>>(branchName,size)
+                        std::make_shared<TensorFillerTmpl<float>>(
+                            "expr_"+std::to_string(iname),
+                            branchName,
+                            size
+                        )
                     );
                 }
             }

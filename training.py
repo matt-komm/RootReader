@@ -242,10 +242,14 @@ except ImportError:
 fileListTrain = []
 #filePathTrain = "/media/matthias/HDD/matthias/Analysis/LLP/training/samples/rootFiles.raw.txt"
 #filePathTrain = "/vols/cms/mkomm/LLP/samples/rootFiles_stripped2.txt"
-#filePathTrain = "/vols/cms/mkomm/LLP/samples2_split/rootFiles_b.txt"
-filePathTrain = "/vols/cms/mkomm/LLP/samples3_split_train_shuffle.txt"
+#filePathTrain = "/vols/cms/mkomm/LLP/samples3_split_train_shuffle.txt"
 
-outputFolder = "llponly_test"
+filePathTrain = "/vols/cms/mkomm/LLP/samples4_train_ttbar.txt"
+#filePathTrain = "/vols/cms/mkomm/LLP/samples4_train_ctau1.txt"
+#filePathTrain = "/vols/cms/mkomm/LLP/samples4_train_ctau10.txt"
+#filePathTrain = "/vols/cms/mkomm/LLP/samples4_train_ctau100.txt"
+
+outputFolder = "test"
 if os.path.exists(outputFolder):
     print "Warning: output folder '%s' already exists!"%outputFolder
 else:
@@ -263,7 +267,7 @@ for l in f:
 f.close()
 print "files train ",len(fileListTrain)
 
-fileListTrain = fileListTrain[:10]#+fileListTrain[-5:]
+fileListTrain = fileListTrain[:10]+fileListTrain[-5:]
 
 #print fileList
 
@@ -290,18 +294,18 @@ featureDict = {
 
     "truth": {
         "branches":[
-            #'isB/UInt_t',
-            #'isBB/UInt_t',
-            #'isGBB/UInt_t',
-            #'isLeptonicB/UInt_t',
-            #'isLeptonicB_C/UInt_t',
+            'isB/UInt_t',
+            'isBB/UInt_t',
+            'isGBB/UInt_t',
+            'isLeptonicB/UInt_t',
+            'isLeptonicB_C/UInt_t',
             'isC/UInt_t',
             'isCC/UInt_t',
             'isGCC/UInt_t',
             'isUD/UInt_t',
             'isS/UInt_t',
             'isG/UInt_t',
-            'isFromLLgno/UInt_t',
+            #'isFromLLgno/UInt_t',
             #'isUndefined/UInt_t',
             #'isFromLLgno_isB/UInt_t',
             #'isFromLLgno_isBB/UInt_t',
@@ -476,7 +480,7 @@ nEntries = chain.GetEntries()
 print "total entries",nEntries
 
 
-binningPt = numpy.logspace(1.6,3,num=20)
+binningPt = numpy.logspace(1.6,3.,num=30)
 binningEta = numpy.linspace(-2.4,2.4,num=10)
 targetShape = ROOT.TH2F("ptetaTarget","",len(binningPt)-1,binningPt,len(binningEta)-1,binningEta)
 branchNameList = []
@@ -491,7 +495,7 @@ for label in featureDict["truth"]["branches"]:
     #hist.SetDirectory(0)
     chain.Project(hist.GetName(),"jet_eta:jet_pt","("+branchName+"==1)")
     
-    if label.find("isFromLLgno")>=0:
+    if label.find("isFromLLgno")>=0 or label.find("isB")>=0:
         targetShape.Add(hist)
         targetEvents+=hist.GetEntries()
     if hist.Integral()>0:
@@ -500,9 +504,11 @@ for label in featureDict["truth"]["branches"]:
         hist.Scale(1./hist.Integral())
     else:
         print " -> no entries found for class: ",branchName
-        
+    hist.Smooth()
     histsPerClass[branchName]=hist
+    
 targetShape.Scale(1./targetShape.Integral())
+targetShape.Smooth()
 
 for label in branchNameList:
     hist = histsPerClass[label]
@@ -511,8 +517,16 @@ for label in branchNameList:
         weight.Divide(hist)
         if weight.GetMaximum()>0:
             print "rescale ",label,1./(weight.GetMaximum())
-            #weight.Scale(1./weight.GetMaximum()) #ensure no crazy oversampling
+            weight.Scale(1./weight.GetMaximum()) #ensure no crazy oversampling
         weightsPerClass[label]=weight
+        for ibin in range(hist.GetNbinsX()):
+            for jbin in range(hist.GetNbinsY()):
+                if weight.GetBinContent(ibin+1,jbin+1)>0:
+                    hist.SetBinContent(ibin+1,jbin+1,
+                        targetShape.GetBinContent(ibin+1,jbin+1)/weight.GetBinContent(ibin+1,jbin+1)
+                    )
+                else:
+                    hist.SetBinContent(ibin+1,jbin+1,0)
     else:
         weight = targetShape.Clone(label)
         weight.Scale(0)
@@ -542,7 +556,7 @@ makePlot(weightsEta,branchNameList,binningEta,";Jet #eta;Weight","weight_eta",lo
 
 
 
-def setupModel(batch):
+def setupModel(batch,add_summary=False):
     result = {}
     globalvars = keras.layers.Input(tensor=batch['globals'])
     cpf = keras.layers.Input(tensor=batch['Cpfcan'])
@@ -564,23 +578,30 @@ def setupModel(batch):
         dropoutRate=0.1,
         momentum=0.6,
         batchnorm=True,
-        lstm=False
+        lstm=False,
+        add_summary=add_summary
     )
     result["prediction"] = prediction
     cross_entropy = keras.losses.categorical_crossentropy(truth, prediction)
-    weighted_loss = tf.reduce_mean(cross_entropy)
-    result["loss"] = weighted_loss
+    loss = tf.reduce_mean(cross_entropy)
+
     accuracy,accuracy_op = tf.metrics.accuracy(tf.argmax(truth,1),tf.argmax(prediction,1))
     result["accuracy"] = accuracy_op
+    
     model = keras.Model(inputs=inputs, outputs=prediction)
     result["model"] = model
     
+    print "Extra loss in model from Keras:", model.losses
+    result["loss"] = tf.add(loss,tf.reduce_sum(model.losses))
+    
     return result
     
-for epoch in range(100):
+global_step = 0
+    
+for epoch in range(0,70):
     epoch_duration = time.time()
     print "epoch",epoch+1
-
+    
     with tf.device('/cpu:0'):
         fileListQueue = tf.train.string_input_producer(fileListTrain, num_epochs=1, shuffle=True)
 
@@ -602,7 +623,7 @@ for epoch in range(100):
             ).resample()
             resamplers.append(resampled)
         
-        batchSize = 2000
+        batchSize = 1000
         minAfterDequeue = batchSize*2
         capacity = minAfterDequeue + 3*batchSize
         
@@ -616,22 +637,25 @@ for epoch in range(100):
         train_test_split = train_test_splitter(
             batch["num"],
             batch,
-            percentage=30
+            percentage=15
         )
         train_batch = train_test_split.train()
         test_batch = train_test_split.test()
 
     model_train = setupModel(train_batch)
     
-    placeholder_test = {}
-    for l in train_batch.keys():
-        placeholder_test[l]=tf.placeholder(
-            train_batch[l].dtype,
-            train_batch[l].shape
-        )
+    
+    with tf.name_scope("test_input"):
+        placeholder_test = {}
+        for l in train_batch.keys():
+            placeholder_test[l]=tf.placeholder(
+                train_batch[l].dtype,
+                train_batch[l].shape,
+                name="test_"+l
+            )
     
     #TODO: try to reuse variables
-    model_test = setupModel(placeholder_test)
+    model_test = setupModel(placeholder_test,add_summary=True)
 
     #model.add_loss(loss)
     #model.compile(optimizer='rmsprop', loss=None)
@@ -639,26 +663,40 @@ for epoch in range(100):
     #train_op = tf.train.GradientDescentOptimizer(0.01).minimize(loss)
     
     learning_rate = tf.placeholder("float")
+    tf.summary.scalar('learning_rate', learning_rate)
 
-    train_op = tf.train.AdamOptimizer(
-        learning_rate=learning_rate,
-        beta1=0.9,
-        beta2=0.999,
-        epsilon=1e-08,
-        use_locking=True,
-        name='Adam'
-    ).minimize(
-        model_train["loss"]
-    )
-
+    with tf.name_scope("minimizer"):
+        train_op = tf.train.AdamOptimizer(
+            learning_rate=learning_rate,
+            beta1=0.9,
+            beta2=0.999,
+            epsilon=1e-03,
+            use_locking=True,
+            name='Adam'
+        ).minimize(
+            model_train["loss"]
+        )
+    tf.summary.scalar('validation_loss', model_test["loss"])
+    tf.summary.scalar('validation_acc', model_test["accuracy"])
+    
+    predictionsPerClass = tf.multiply(placeholder_test["truth"],model_test["prediction"])
+    fightPerClass = tf.argmax(tf.multiply(1-placeholder_test["truth"],model_test["prediction"]),axis=1)
+    
+    for i,label in enumerate(featureDict["truth"]["branches"]):
+        tf.summary.histogram('validation_prob_'+label.split('/')[0],predictionsPerClass[:,i])
+        tf.summary.histogram('validation_fight_'+label.split('/')[0],fightPerClass)
+    
+    summary_op = tf.summary.merge_all()
 
     #init_op = tf.global_variables_initializer() #bug https://github.com/tensorflow/tensorflow/issues/1045
     init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 
     sess = K.get_session()
-
+    
     sess.run(init_op)
-
+    
+    summary_writer = tf.summary.FileWriter(os.path.join(outputFolder,"log"+str(epoch)), sess.graph)
+    
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
     
@@ -676,27 +714,14 @@ for epoch in range(100):
     nTrain = 0
     nTest = 0
     start_time = time.time()
-    
-    testingHists = {}
-    for i in range(len(branchNameList)):
-        testingHists[i]=ROOT.TH2F(
-            "etapt"+str(i),";pt;eta",
-            len(binningPt)-1,
-            binningPt,
-            len(binningEta)-1,
-            binningEta
-        )
-        
-     
-    learning_rate_val = 0.0001*(0.85**(1.*epoch))
+
+    #double decay
+    learning_rate_val = 0.0005*(0.1**(epoch/5.))+0.0001*(0.1**(epoch/40.))
     try:
         step = 0
         while not coord.should_stop():
             step += 1
-            
-            
-            
-            
+            global_step+=1
             #loss is calculated before weights are updated
             model_test["model"].set_weights(model_train["model"].get_weights()) 
             _,_,loss_train, accuracy_train,test_batch_value = sess.run([
@@ -706,21 +731,19 @@ for epoch in range(100):
                 ], 
                     feed_dict={K.learning_phase(): 1, learning_rate:learning_rate_val}
             )
-            if epoch==0:
-                for ibatch in range(len(test_batch_value["truth"])):
-                    testingHists[numpy.argmax(test_batch_value["truth"][ibatch])].Fill(
-                        test_batch_value["globals"][ibatch][0],
-                        test_batch_value["globals"][ibatch][1],
-                    )
             
             feed_dict = {K.learning_phase(): 0, learning_rate:learning_rate_val}
             for l in placeholder_test.keys():
                 feed_dict[placeholder_test[l]]=test_batch_value[l]
-            loss_test, accuracy_test = sess.run([
-                    model_test["loss"],model_test["accuracy"]
+            summary_val,loss_test, accuracy_test = sess.run([
+                    summary_op,model_test["loss"],model_test["accuracy"]
                 ], 
                     feed_dict=feed_dict
             )
+            #only start reporting after a few initial steps
+            if global_step>10:
+                summary_writer.add_summary(summary_val,global_step)
+            
             #account for dynamic batch size
             nTestBatch = len(test_batch_value["num"])
             nTest+=nTestBatch
@@ -730,7 +753,7 @@ for epoch in range(100):
             if (nTestBatch)>0:
                 total_loss_test+=loss_test*nTestBatch
                     
-                
+                    
             if step % 10 == 0:
                 duration = (time.time() - start_time)/10.
                 print 'Step %d/~%d: loss = %.2f (%.2f), accuracy = %.1f%% (%.1f%%), time = %.3f sec' % (step,math.floor(1.*nEntries/batchSize),loss_train,loss_test,accuracy_train*100.,accuracy_test*100.,duration)
@@ -745,44 +768,11 @@ for epoch in range(100):
     print "Average loss = %.2f (%.2f)"%(avgLoss_train,avgLoss_test)
     print "Learning rate = = %.3e"%(learning_rate_val)
     f = open(os.path.join(outputFolder,"model_epoch.stat"),"a")
-    f.write(str(epoch)+";"+str(avgLoss_train)+";"+str(avgLoss_test)+";"+str(accuracy_train*100.)+";"+str(accuracy_test*100.)+"\n")
+    f.write(str(epoch)+";"+str(learning_rate_val)+";"+str(avgLoss_train)+";"+str(avgLoss_test)+";"+str(accuracy_train*100.)+";"+str(accuracy_test*100.)+"\n")
     f.close()
     coord.request_stop()
     coord.join(threads)
     K.clear_session()
-    
-    cvpt = ROOT.TCanvas("cvpt","",800,700)
-    cvpt.SetLogx(1)
-    axispt = ROOT.TH2F("axispt",";pt;au",50,binningPt[0],binningPt[-1],50,0,0.15)
-    axispt.Draw("AXIS")
-    hists = []
-    for i in range(len(branchNameList)):
-        hist.Scale(1./hist.Integral())
-        
-        #testingHists[i].Draw("colztext")
-        hist = testingHists[i].ProjectionX()
-        hist.Scale(1./hist.Integral())
-        hist.SetLineWidth(i+1)
-        hist.Draw("HISTSameL")
-        hists.append(hist)
-    cvpt.Print(os.path.join(outputFolder,"test_pt.pdf"))
-    
-    cveta = ROOT.TCanvas("cveta","",800,700)
-    cveta.SetLogx(1)
-    axiseta = ROOT.TH2F("axiseta",";pt;au",50,binningEta[0],binningEta[-1],50,0,0.15)
-    axiseta.Draw("AXIS")
-    hists = []
-    for i in range(len(branchNameList)):
-        hist.Scale(1./hist.Integral())
-        
-        #testingHists[i].Draw("colztext")
-        hist = testingHists[i].ProjectionY()
-        hist.Scale(1./hist.Integral())
-        hist.SetLineWidth(i+1)
-        hist.Draw("HISTSameL")
-        hists.append(hist)
-    cveta.Print(os.path.join(outputFolder,"test_eta.pdf"))
-       
     
     
     

@@ -3,30 +3,30 @@ from keras.layers.pooling import MaxPooling2D
 from keras.layers.normalization import BatchNormalization
 import tensorflow as tf
 
-def block_deepFlavourConvolutions(charged,neutrals,vertices,dropoutRate,active=True,batchnorm=False,batchmomentum=0.6):
+def block_deepFlavourConvolutions(cpf_input,npf_input,vtx_input,dropoutRate,active=True,batchnorm=False,batchmomentum=0.6,add_summary=False):
     with tf.name_scope('cpf_conv'):
-        cpf=charged
         if active:
-            cpf  = Convolution1D(64, 1, kernel_initializer='lecun_uniform',  activation='relu')(cpf)
+            cpf = Convolution1D(64, 1, kernel_initializer='lecun_uniform',  activation='relu')(cpf_input)
             if batchnorm:
                 cpf = BatchNormalization(momentum=batchmomentum)(cpf)
             cpf = Dropout(dropoutRate)(cpf)                                                   
-            cpf  = Convolution1D(32, 1, kernel_initializer='lecun_uniform',  activation='relu')(cpf)
+            cpf = Convolution1D(32, 1, kernel_initializer='lecun_uniform',  activation='relu')(cpf)
             if batchnorm:
                 cpf = BatchNormalization(momentum=batchmomentum)(cpf)
             cpf = Dropout(dropoutRate)(cpf)                                                   
-            cpf  = Convolution1D(32, 1, kernel_initializer='lecun_uniform',  activation='relu')(cpf)
+            cpf = Convolution1D(32, 1, kernel_initializer='lecun_uniform',  activation='relu')(cpf)
             if batchnorm:
                 cpf = BatchNormalization(momentum=batchmomentum)(cpf)
             cpf = Dropout(dropoutRate)(cpf)                                                   
-            cpf  = Convolution1D(8, 1, kernel_initializer='lecun_uniform',  activation='relu')(cpf)
+            cpf = Convolution1D(8, 1, kernel_initializer='lecun_uniform',  activation='relu')(cpf)
+            cpf = BatchNormalization(momentum=batchmomentum)(cpf)
+            cpf = Dropout(dropoutRate)(cpf)         
         else:
-            cpf = Convolution1D(1,1, kernel_initializer='zeros',trainable=False)(cpf)
+            cpf = Convolution1D(1,1, kernel_initializer='zeros',trainable=False)(cpf_input)
         
     with tf.name_scope('npf_conv'):
-        npf=neutrals
         if active:
-            npf = Convolution1D(32, 1, kernel_initializer='lecun_uniform',  activation='relu')(npf)
+            npf = Convolution1D(32, 1, kernel_initializer='lecun_uniform',  activation='relu')(npf_input)
             if batchnorm:
                 npf = BatchNormalization(momentum=batchmomentum)(npf)
             npf = Dropout(dropoutRate)(npf) 
@@ -35,13 +35,14 @@ def block_deepFlavourConvolutions(charged,neutrals,vertices,dropoutRate,active=T
                 npf = BatchNormalization(momentum=batchmomentum)(npf)
             npf = Dropout(dropoutRate)(npf)
             npf = Convolution1D(4, 1, kernel_initializer='lecun_uniform',  activation='relu')(npf)
+            npf = BatchNormalization(momentum=batchmomentum)(npf)
+            npf = Dropout(dropoutRate)(npf)
         else:
-            npf = Convolution1D(1,1, kernel_initializer='zeros',trainable=False)(npf)
+            npf = Convolution1D(1,1, kernel_initializer='zeros',trainable=False)(npf_input)
 
     with tf.name_scope('vtx_conv'):
-        vtx = vertices
         if active:
-            vtx = Convolution1D(64, 1, kernel_initializer='lecun_uniform',  activation='relu')(vtx)
+            vtx = Convolution1D(64, 1, kernel_initializer='lecun_uniform',  activation='relu')(vtx_input)
             if batchnorm:
                 vtx = BatchNormalization(momentum=batchmomentum)(vtx)
             vtx = Dropout(dropoutRate)(vtx) 
@@ -54,15 +55,21 @@ def block_deepFlavourConvolutions(charged,neutrals,vertices,dropoutRate,active=T
                 vtx = BatchNormalization(momentum=batchmomentum)(vtx)
             vtx = Dropout(dropoutRate)(vtx)
             vtx = Convolution1D(8, 1, kernel_initializer='lecun_uniform',  activation='relu')(vtx)
+            vtx = BatchNormalization(momentum=batchmomentum)(vtx)
+            vtx = Dropout(dropoutRate)(vtx)
         else:
-            vtx = Convolution1D(1,1, kernel_initializer='zeros',trainable=False)(vtx)
-
+            vtx = Convolution1D(1,1, kernel_initializer='zeros',trainable=False)(vtx_input)
+    if add_summary:
+        tf.summary.histogram('conv_cpf', tf.reduce_mean(cpf,axis=1))
+        tf.summary.histogram('conv_npf', tf.reduce_mean(npf,axis=1))
+        tf.summary.histogram('conv_vtx', tf.reduce_mean(vtx,axis=1))
+        
     return cpf,npf,vtx
 
-def block_deepFlavourDense(x,dropoutRate,active=True,batchnorm=False,batchmomentum=0.6):
+def block_deepFlavourDense(x,dropoutRate,active=True,batchnorm=False,batchmomentum=0.6,add_summary=False):
     with tf.name_scope('dense'):
         if active:
-            x=  Dense(200, activation='relu',kernel_initializer='lecun_uniform')(x)
+            x=  Dense(200, activation='tanh',kernel_initializer='lecun_uniform')(x)
             if batchnorm:
                 x = BatchNormalization(momentum=batchmomentum)(x)
             x = Dropout(dropoutRate)(x)
@@ -86,7 +93,7 @@ def block_deepFlavourDense(x,dropoutRate,active=True,batchnorm=False,batchmoment
             if batchnorm:
                 x = BatchNormalization(momentum=batchmomentum)(x)
             x = Dropout(dropoutRate)(x)
-            x=  Dense(100, activation='relu',kernel_initializer='lecun_uniform', )(x)
+            x=  Dense(100, activation='relu',kernel_initializer='lecun_uniform')(x)
             if batchnorm:
                 x = BatchNormalization(momentum=batchmomentum)(x)
             x = Dropout(dropoutRate)(x)
@@ -99,7 +106,7 @@ def block_deepFlavourDense(x,dropoutRate,active=True,batchnorm=False,batchmoment
         
         return x
 
-def model_deepFlavourReference(Inputs,nclasses,nregclasses,dropoutRate=0.1,momentum=0.6,batchnorm=False,lstm=False):
+def model_deepFlavourReference(Inputs,nclasses,nregclasses,dropoutRate=0.1,momentum=0.6,batchnorm=False,lstm=False,add_summary=False):
     #deep flavor w/o pt regression
     
     
@@ -114,15 +121,21 @@ def model_deepFlavourReference(Inputs,nclasses,nregclasses,dropoutRate=0.1,momen
         npf    =     Inputs[2]
         vtx    =     Inputs[3]
         
+    if add_summary:
+        tf.summary.histogram('input_globals', tf.reduce_mean(globalvars,axis=1))
+        tf.summary.histogram('input_cpf', tf.reduce_mean(cpf,axis=1))
+        tf.summary.histogram('input_npf', tf.reduce_mean(npf,axis=1))
+        tf.summary.histogram('input_vtx', tf.reduce_mean(vtx,axis=1))
+        
     #gen    =     Inputs[4]
     #ptreginput = BatchNormalization(momentum=momentum,name='reg_input_batchnorm')     (Inputs[4])
 
-    cpf,npf,vtx = block_deepFlavourConvolutions(charged=cpf,
-                                                neutrals=npf,
-                                                vertices=vtx,
+    cpf,npf,vtx = block_deepFlavourConvolutions(cpf,
+                                                npf,
+                                                vtx,
                                                 dropoutRate=dropoutRate,
                                                 active=True,
-                                                batchnorm=batchnorm, batchmomentum=momentum)
+                                                batchnorm=batchnorm, batchmomentum=momentum,add_summary=add_summary)
 
 
 
@@ -164,12 +177,17 @@ def model_deepFlavourReference(Inputs,nclasses,nregclasses,dropoutRate=0.1,momen
             cpf = Flatten()(cpf)
             npf = Flatten()(npf)
             vtx = Flatten()(vtx)
+    if add_summary:  
+        tf.summary.histogram('lstm_cpf', cpf)
+        tf.summary.histogram('lstm_npf', npf)
+        tf.summary.histogram('lstm_vtx', vtx)
+        
+        
 
     x = Concatenate()( [globalvars,cpf,npf,vtx])
 
-    flavour_pred = block_deepFlavourDense(x,dropoutRate,active=True,batchnorm=batchnorm,batchmomentum=momentum)
+    flavour_pred = block_deepFlavourDense(x,dropoutRate,active=True,batchnorm=batchnorm,batchmomentum=momentum,add_summary=add_summary)
     flavour_pred = Dense(nclasses, activation='softmax',kernel_initializer='lecun_uniform',name='ID_pred')(flavour_pred)
-    
     #reg = Concatenate()( [flavour_pred, globalvars[:,1:1] ] ) 
     #reg_pred=Dense(2, activation='linear',kernel_initializer='ones',name='regression_pred',trainable=True)(reg)
 

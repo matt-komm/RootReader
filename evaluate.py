@@ -29,8 +29,10 @@ from deepFlavour import model_deepFlavourReference
 
 fileList = []
 
-filePath = "/vols/cms/mkomm/LLP/samples2_split2/rootFiles_test_llp.txt"
+#filePath = "/vols/cms/mkomm/LLP/samples2_split2/rootFiles_test_llp.txt"
 #filePath = "/vols/cms/mkomm/LLP/samples/rootFiles_stripped2.txt"
+filePath = "/vols/cms/mkomm/LLP/samples4_test.txt"
+
 f = open(filePath)
 for l in f:
     absPath = os.path.join(filePath.rsplit('/',1)[0],l.replace("\n","").replace("\r","")+"")
@@ -91,8 +93,8 @@ featureDict = {
             'isUD/UInt_t',
             'isS/UInt_t',
             'isG/UInt_t',
-            'isUndefined/UInt_t',
-            'isFromLLgno/UInt_t',
+            #'isFromLLgno/UInt_t',
+            #'isUndefined/UInt_t',
             #'isFromLLgno_isB/UInt_t',
             #'isFromLLgno_isBB/UInt_t',
             #'isFromLLgno_isGBB/UInt_t',
@@ -196,7 +198,7 @@ for ifile,fileNameSizePair in enumerate(fileList):
         dropoutRate=0.1,
         momentum=0.6,
         batchnorm=True,
-        lstm=True
+        lstm=False
     )
 
     loss = tf.reduce_sum(keras.losses.categorical_crossentropy(truth, prediction))
@@ -205,8 +207,8 @@ for ifile,fileNameSizePair in enumerate(fileList):
     eval_labels = []
     for branch in featureDict["truth"]["branches"]:
         s = branch.rsplit("/",1)
-        eval_labels.append("eval_llp_"+s[0]+"/"+s[1])
-    rootwriter_op, write_flag = root_writer(prediction,eval_labels,"evaluated",fileName+".llp.friend").write()
+        eval_labels.append("eval_b_"+s[0]+"/"+s[1])
+    rootwriter_op, write_flag = root_writer(prediction,eval_labels,"evaluated",fileName+".b.friend").write()
     #init_op = tf.global_variables_initializer() #bug https://github.com/tensorflow/tensorflow/issues/1045
     init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 
@@ -219,7 +221,7 @@ for ifile,fileNameSizePair in enumerate(fileList):
     total_loss = 0
     
     print "loading weights ..."
-    model.load_weights("llponly/model_epoch50.hdf5") #use after init_op which initializes random weights!!!
+    model.load_weights("ttbar_noLSTM/model_epoch69.hdf5") #use after init_op which initializes random weights!!!
     
     try:
         step = 0

@@ -220,7 +220,8 @@ fileList = []
 
 #filePath = "/vols/cms/mkomm/LLP/samples2_split2/rootFiles_test_ttbar.txt"
 #filePath = "/vols/cms/mkomm/LLP/rootFiles_ttbar.txt"
-filePath = "/vols/cms/mkomm/LLP/rootFiles_llp.txt"
+#filePath = "/vols/cms/mkomm/LLP/rootFiles_llp.txt"
+filePath = "/vols/cms/mkomm/LLP/samples4_test.txt"
 
 xsecs = {
     "QCD_Pt_30to50_TuneCUETP8M1_13TeV_pythia8":140932000,
@@ -261,10 +262,10 @@ nevents = {
 f = open(filePath)
 for l in f:
     fileName = os.path.join(filePath.rsplit('/',1)[0],l.replace("\n","").replace("\r",""))
-    #friendFile = fileName+".b.friend"
+    friendFile = fileName+".b.friend"
     #friendFile = fileName+".llp.friend"
     #print fileName
-    friendFile = fileName.rsplit("/",1)[0]+"/evaluated_llp/"+fileName.rsplit("/",1)[1].rsplit(".",1)[0]+"_predict.root"
+    #friendFile = fileName.rsplit("/",1)[0]+"/evaluated_llp/"+fileName.rsplit("/",1)[1].rsplit(".",1)[0]+"_predict.root"
     if (not os.path.exists(friendFile)):
         print "warning file '",friendFile,"' not found"
         continue
@@ -287,8 +288,8 @@ def makeHistogram(var,weight,binning):
         tree = rootFile.Get("deepntuplizer/tree")
         if (tree):
             for fExtra in f[1:]:
-                #tree.AddFriend("evaluated",fExtra)
-                tree.AddFriend("tree",fExtra)
+                tree.AddFriend("evaluated",fExtra)
+                #tree.AddFriend("tree",fExtra)
             histTemp = hist.Clone()
             histTemp.Scale(0)
             tree.Project(histTemp.GetName(),var,weight)
@@ -350,7 +351,7 @@ def drawROC(name,sigEff,bgRej,auc=None,style=1):
     cv.SetFrameLineWidth(1)
 
     # Margins:
-    cv.SetLeftMargin(0.145)
+    cv.SetLeftMargin(0.163)
     cv.SetRightMargin(0.03)
     cv.SetTopMargin(0.08)
     cv.SetBottomMargin(0.16)
@@ -433,7 +434,7 @@ def makeFlag(varList,isEval=False):
     ret = "(0"
     if isEval:
         for var in varList:
-            ret+="+prob_"+var
+            ret+="+eval_b_"+var
     else:
         for var in varList:
             ret+="||("+var+"==1)"
@@ -459,23 +460,20 @@ cColor = newColor(0.0,0.9,0.4).GetNumber()
 lColor = newColor(0.1,0.0,1.0).GetNumber()
     
 for probVar in [
-    ["probllp","Prob(LLP jet)",makeFlag(llpFlagsAll+['isB','isBB','isLeptB'],True)],
-    #["probb","Prob(b jet)",makeFlag(['isB','isBB','isLeptB'],True)],
+    #["probllp","Prob(LLP jet)",makeFlag(llpFlagsAll+['isB','isBB','isLeptB'],True)],
+    ["probb","Prob(b jet)",makeFlag(bFlags,True)],
     #["probc","Prob(c jet)",makeFlag(cFlags,True)],
     #["probl","Prob(udgs jet)",makeFlag(lFlags,True)],
 ]:
     for selection in [
         ["none","","1"],
-        ["pt30_60","p#lower[0.3]{#scale[0.7]{T}}#in#kern[-0.55]{ }[30;60]#kern[-0.5]{ }GeV","(jet_pt>30)*(jet_pt<60)"],
-        ["pt60_150","p#lower[0.3]{#scale[0.7]{T}}#in#kern[-0.55]{ }[60;150]#kern[-0.5]{ }GeV","(jet_pt>60)*(jet_pt<150)"],
-        ["pt150_300","p#lower[0.3]{#scale[0.7]{T}}#in#kern[-0.55]{ }[150;300]#kern[-0.5]{ }GeV","(jet_pt>150)*(jet_pt<300)"],
-        ["pt300_600","p#lower[0.3]{#scale[0.7]{T}}#in#kern[-0.55]{ }[300;600]#kern[-0.5]{ }GeV","(jet_pt>300)*(jet_pt<600)"],
-        ["pt600","p#lower[0.3]{#scale[0.7]{T}}>600#kern[-0.5]{ }GeV","(jet_pt>600)"],
-        ["prompt","L#lower[0.3]{#scale[0.7]{Lab}}#in#kern[-0.55]{ }[10#lower[-0.7]{#scale[0.7]{-5}};10#lower[-0.7]{#scale[0.7]{-2}}]#kern[-0.5]{ }cm","(genLL_decayLength>-5)*(genLL_decayLength<-2)"],
-        ["blike","L#lower[0.3]{#scale[0.7]{Lab}}#in#kern[-0.55]{ }[10#lower[-0.7]{#scale[0.7]{-2}};10#lower[-0.7]{#scale[0.7]{1}}]#kern[-0.5]{ }cm","(genLL_decayLength>-2)*(genLL_decayLength<1)"],
-        ["displaced","L#lower[0.3]{#scale[0.7]{Lab}}#in#kern[-0.55]{ }[10#lower[-0.7]{#scale[0.7]{1}};10#lower[-0.7]{#scale[0.7]{5}}]#kern[-0.5]{ }cm","(genLL_decayLength>1)*(genLL_decayLength<5)"],
-        ["nosv","#SV=0","(nsv==0)"],
-        ["wsv","#SV>0","(nsv>0)"],
+        #["highllp","Prob(LLP jet)>60%","("+makeFlag(llpFlagsAll,True)+">0.75)"],
+        #["pt30_60","p#lower[0.3]{#scale[0.7]{T}}#in#kern[-0.55]{ }[30;60]#kern[-0.5]{ }GeV","(jet_pt>30)*(jet_pt<60)"],
+        #["pt60_150","p#lower[0.3]{#scale[0.7]{T}}#in#kern[-0.55]{ }[60;150]#kern[-0.5]{ }GeV","(jet_pt>60)*(jet_pt<150)"],
+        #["pt150_300","p#lower[0.3]{#scale[0.7]{T}}#in#kern[-0.55]{ }[150;300]#kern[-0.5]{ }GeV","(jet_pt>150)*(jet_pt<300)"],
+        #["pt300_600","p#lower[0.3]{#scale[0.7]{T}}#in#kern[-0.55]{ }[300;600]#kern[-0.5]{ }GeV","(jet_pt>300)*(jet_pt<600)"],
+        #["pt600","p#lower[0.3]{#scale[0.7]{T}}>600#kern[-0.5]{ }GeV","(jet_pt>600)"],
+        
     ]:
         cv = ROOT.TCanvas("cv"+str(random.random()),"",900,700)
         cv.SetRightMargin(0.3)
@@ -485,9 +483,10 @@ for probVar in [
         legend.SetTextFont(43)
         legend.SetTextSize(32*cvscale*fontScale)
 
-        histLL = makeHistogram(probVar[2],makeFlag(llpFlagsAll)+"*"+selection[2]+"*(jet_pt>30.)*(fabs(jet_eta)<2.4)",numpy.linspace(0,1,num=501))
-        histLL.SetLineColor(llpColor)
-        histLL.SetLineWidth(3)
+        #histLL = makeHistogram(probVar[2],makeFlag(llpFlagsAll)+"*"+selection[2]+"*(jet_pt>30.)*(fabs(jet_eta)<2.4)",numpy.linspace(0,1,num=501))
+        #histLL.SetLineColor(llpColor)
+        #histLL.SetLineWidth(3)
+        print makeFlag(bFlags)
         histB = makeHistogram(probVar[2],makeFlag(bFlags)+"*"+selection[2]+"*(jet_pt>30.)*(fabs(jet_eta)<2.4)",numpy.linspace(0,1,num=501))
         histB.SetLineColor(bColor)
         histB.SetLineWidth(3)
@@ -504,7 +503,7 @@ for probVar in [
         sigEff,bgRej,bgEff = getROC(histLL,histB)
         auc_b = getAUC(sigEff,bgRej)
         drawROC(probVar[0]+"_"+selection[0]+"_b_roc",sigEff,bgEff,auc_b)
-        '''
+        
         sigEff,bgRej,bgEff = getROC(histLL,histC)
         auc_c = getAUC(sigEff,bgRej)
         drawROC(probVar[0]+"_"+selection[0]+"_c_roc",sigEff,bgEff,auc_c)
@@ -521,19 +520,23 @@ for probVar in [
         sigEff,bgRej,bgEff = getROC(histB,histL)
         auc_l = getAUC(sigEff,bgRej)
         drawROC(probVar[0]+"_"+selection[0]+"_l_roc",sigEff,bgEff,auc_l,style=1)
-        '''
-        histLL.Rebin(20)
+        
+        #histLL.Rebin(20)
         histB.Rebin(20)
         histC.Rebin(20)
         histL.Rebin(20)
 
-        histLL.Scale(1./histLL.Integral())
-        #histB.Scale(1./histB.Integral())
-        histC.Scale(1./histC.Integral())
-        histL.Scale(1./histL.Integral())
+        #if histLL.Integral()>0:
+        #    histLL.Scale(1./histLL.Integral())
+        if histB.Integral()>0:
+            histB.Scale(1./histB.Integral())
+        if histC.Integral()>0:
+            histC.Scale(1./histC.Integral())
+        if histL.Integral()>0:
+            histL.Scale(1./histL.Integral())
         
-        legend.AddEntry(histLL,"LLP jet","L")
-        #legend.AddEntry(histB,"b jet","L")
+        #legend.AddEntry(histLL,"LLP jet","L")
+        legend.AddEntry(histB,"b jet","L")
         #legend.AddEntry("","(%4.1f%%)"%(auc_b*100),"")
         legend.AddEntry(histC,"c jet","L")
         legend.AddEntry("","AUC: %4.1f%%"%(auc_c*100),"")
@@ -543,13 +546,13 @@ for probVar in [
 
 
         cv.SetLogy(1)
-        axis = ROOT.TH2F("axis"+str(random.random()),";"+probVar[1]+";Normalized events",50,0,1,50,0.00001,max(map(lambda x: x.GetMaximum(), [histLL,histC,histL]))*1.2)
+        axis = ROOT.TH2F("axis"+str(random.random()),";"+probVar[1]+";Normalized events",50,0,1.,50,0.0001,max(map(lambda x: x.GetMaximum(), [histB,histC,histL]))*1.2)
         axis.Draw("AXIS")
 
-        histL.Draw("HISTSame")
+        #histL.Draw("HISTSame")
         histC.Draw("HISTSame")
-        #histB.Draw("HISTSame")
-        histLL.Draw("HISTSame")
+        histB.Draw("HISTSame")
+        #histLL.Draw("HISTSame")
 
         pCMS=ROOT.TPaveText(cv.GetLeftMargin(),0.94,cv.GetLeftMargin(),0.94,"NDC")
         pCMS.SetFillColor(ROOT.kWhite)

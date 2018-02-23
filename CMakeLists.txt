@@ -20,7 +20,7 @@ add_library(RootReader
     MODULE
     RootReader.cc
 )
-target_link_libraries(RootReader ${TensorFlow_LIBRARY} ${ROOT_LIBRARIES})
+target_link_libraries(RootReader ${TensorFlow_LIBRARY} ${ROOT_LIBRARIES} -lTreePlayer)
 
 add_library(RootWriter
     MODULE

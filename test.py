@@ -5,8 +5,8 @@ rootreader_module = tf.load_op_library('./libRootReader.so')
 
 fileList = []
 
-filePath = "/media/matthias/HDD/matthias/Analysis/LLP/training/samples/rootFiles.raw.txt"
 #filePath = "/vols/cms/mkomm/LLP/samples/rootFiles.txt"
+filePath = "/vols/cms/mkomm/LLP/samples4_test.txt"
 
 f = open(filePath)
 for l in f:
@@ -17,30 +17,31 @@ print len(fileList)
 
 fileList = fileList[:5]
 
-print fileList
+#print fileList
 
 def makeReader(queue):
     batch, num = rootreader_module.root_reader(queue, 
     [
         "jet_pt",
         "jet_eta",
-        "sv_pt[n_sv,2]",
-        "sv_eta[n_sv,2]",
+        "(1-2*Cpfcan_ptrel)[2]",
+        #"sv_eta[2]",
         #"genLL_decayLength"
     ],
     "deepntuplizer/tree",
-    naninf=0)
-    return batch
+    naninf=0,
+    batch=100)
+    return [batch,num]
 
 for epoch in range(1):
     print "epoch",epoch+1
-    fileListQueue = tf.train.string_input_producer(fileList, num_epochs=2, shuffle=True)
+    fileListQueue = tf.train.string_input_producer(fileList, num_epochs=2, shuffle=False)
 
     init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 
     dequeue_op = fileListQueue.dequeue()
 
-    print fileListQueue.queue_ref
+    #print fileListQueue.queue_ref
 
     rootreader_ops = [
         
@@ -53,12 +54,12 @@ for epoch in range(1):
     capacity = minAfterDequeue + 3 * batchSize
 
     #trainingBatch = tf.train.batch_join(
-    trainingBatch = tf.train.shuffle_batch_join(
+    trainingBatch = tf.train.batch_join(
         rootreader_ops, 
         batch_size=batchSize, 
         capacity=capacity,
-        min_after_dequeue=minAfterDequeue,
-        enqueue_many=False #requires to read examples in batches!
+        #min_after_dequeue=minAfterDequeue,
+        enqueue_many=True #requires to read examples in batches!
     )
 
     sess = tf.Session()
@@ -80,7 +81,7 @@ for epoch in range(1):
             print sess.run(trainingBatch)
             print steps
             steps+=1
-            if steps>10:
+            if steps>2:
                 break
             #print sess.run(dequeue_op)
     except tf.errors.OutOfRangeError:
