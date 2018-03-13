@@ -594,7 +594,7 @@ def setupModel(batch,add_summary=False):
         inputs,
         nclasses,
         1,
-        dropoutRate=0.1,
+        dropoutRate=0.0,
         momentum=0.6,
         batchnorm=False,
         lstm=False,

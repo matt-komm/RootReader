@@ -31,6 +31,8 @@ REGISTER_OP("ClassificationWeights")
 #include "TH2F.h"
 #include "TFile.h"
 
+#include "RootMutex.h"
+
 
 class ClassificationWeightsOp:
     public OpKernel
@@ -43,7 +45,6 @@ class ClassificationWeightsOp:
         std::vector<std::shared_ptr<TH2F>> hists;
         std::vector<int> varIndex;
         
-        static mutex globalMutexForROOT_; //protects ROOT
     public:
         explicit ClassificationWeightsOp(OpKernelConstruction* context): 
             OpKernel(context)
@@ -60,7 +61,7 @@ class ClassificationWeightsOp:
                 context,
                 context->GetAttr("varindex",&varIndex)
             );
-            mutex_lock rootLock(globalMutexForROOT_);
+            RootMutex::Lock lock = RootMutex::lock();
             TFile rootFile(filePath.c_str());
             if (not rootFile.IsOpen ())
             {
@@ -82,7 +83,7 @@ class ClassificationWeightsOp:
         
         virtual ~ClassificationWeightsOp()
         { 
-            mutex_lock rootLock(globalMutexForROOT_);
+            RootMutex::Lock lock = RootMutex::lock();
             hists.clear();
         }
         
@@ -133,7 +134,6 @@ class ClassificationWeightsOp:
         }  
 };
 
-mutex ClassificationWeightsOp::globalMutexForROOT_;
 
 REGISTER_KERNEL_BUILDER(Name("ClassificationWeights").Device(DEVICE_CPU),ClassificationWeightsOp);
 

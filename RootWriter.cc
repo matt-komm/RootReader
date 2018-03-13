@@ -25,6 +25,7 @@ REGISTER_OP("RootWriter")
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/shape_inference.h"
 
+#include "RootMutex.h"
 
 #include "TFile.h"
 #include "TTree.h"
@@ -177,7 +178,6 @@ class RootWriterOp:
         };
         
     private:
-        static mutex globalMutexForROOT_; //protects ROOT
         mutex localMutex_; //protects class members
         std::unique_ptr<TFile> outputFile_;
         TTree* tree_;
@@ -205,7 +205,7 @@ class RootWriterOp:
                 context->GetAttr("filename",&file_name)
             );
             
-            mutex_lock rootLock(globalMutexForROOT_);
+            RootMutex::Lock lock = RootMutex::lock();
             
             outputFile_.reset(new TFile(file_name.c_str(),"RECREATE"));
             tree_ = new TTree(tree_name.c_str(),tree_name.c_str());
@@ -258,7 +258,7 @@ class RootWriterOp:
                     //std::cout<<"writing "<<branches_[i]->name()<<" = "<<input(i)<<std::endl;
                     branches_[i]->value()=input(ibatch*label_length+i);
                 }
-                mutex_lock rootLock(globalMutexForROOT_);
+                RootMutex::Lock lock = RootMutex::lock();
                 outputFile_->cd();
                 tree_->Fill();
             }
@@ -283,7 +283,6 @@ class RootWriterOp:
             
 };
 
-mutex RootWriterOp::globalMutexForROOT_;
 
 REGISTER_KERNEL_BUILDER(Name("RootWriter").Device(DEVICE_CPU),RootWriterOp);
 

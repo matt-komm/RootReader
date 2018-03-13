@@ -61,6 +61,7 @@ REGISTER_OP("RootReader")
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/shape_inference.h"
 
+#include "RootMutex.h"
 
 #include "TFile.h"
 #include "TTree.h"
@@ -164,7 +165,6 @@ class RootReaderOp:
         };
         
     private:
-        static mutex globalMutexForROOT_; //protects ROOT
         mutex localMutex_; //protects class members
         std::unique_ptr<TFile> inputFile_;
         TTree* tree_;
@@ -188,7 +188,7 @@ class RootReaderOp:
             nEvents_(0)
         {
         
-            mutex_lock globalLock(globalMutexForROOT_);
+            RootMutex::Lock lock = RootMutex::lock();
             
             std::vector<string> branchNames;
             OP_REQUIRES_OK(
@@ -257,7 +257,7 @@ class RootReaderOp:
         
         virtual ~RootReaderOp()
         {
-            mutex_lock globalLock(globalMutexForROOT_);
+            RootMutex::Lock lock = RootMutex::lock();
             tensorFillers_.clear();
         }
         
@@ -278,7 +278,7 @@ class RootReaderOp:
                 if (fileName.size()==0) throw std::runtime_error("Got empty filename");
                    
                 //creating TFile/setting branch adresses is not thread safe
-                mutex_lock rootLock(globalMutexForROOT_);
+                RootMutex::Lock lock = RootMutex::lock();
                 //TODO: use TF logging and set loglevel
                 inputFile_.reset(new TFile(fileName.c_str()));
                 currentEntry_ = 0;
@@ -328,7 +328,7 @@ class RootReaderOp:
             }
             if (currentEntry_>=nEvents_)
             {
-                mutex_lock globalLock(globalMutexForROOT_);
+                RootMutex::Lock lock = RootMutex::lock();
                 //inputFile_->Close(); //sometimes this yields a segfault from root
                 inputFile_.reset(nullptr);
             }
@@ -370,7 +370,6 @@ class RootReaderOp:
         }   
 };
 
-mutex RootReaderOp::globalMutexForROOT_;
 
 REGISTER_KERNEL_BUILDER(Name("RootReader").Device(DEVICE_CPU),RootReaderOp);
 

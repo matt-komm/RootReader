@@ -10,19 +10,19 @@ def block_deepFlavourConvolutions(cpf_input,npf_input,vtx_input,dropoutRate,acti
             cpf = Convolution1D(64, 1, kernel_initializer='lecun_uniform',  activation='relu')(cpf_input)
             if batchnorm:
                 cpf = BatchNormalization(momentum=batchmomentum)(cpf,training=K.learning_phase())
-            cpf = Dropout(dropoutRate)(cpf)                                                   
+            cpf = Dropout(dropoutRate)(cpf,training=K.learning_phase())                                                
             cpf = Convolution1D(32, 1, kernel_initializer='lecun_uniform',  activation='relu')(cpf)
             if batchnorm:
                 cpf = BatchNormalization(momentum=batchmomentum)(cpf,training=K.learning_phase())
-            cpf = Dropout(dropoutRate)(cpf)                                                   
+            cpf = Dropout(dropoutRate)(cpf,training=K.learning_phase())                                                  
             cpf = Convolution1D(32, 1, kernel_initializer='lecun_uniform',  activation='relu')(cpf)
             if batchnorm:
                 cpf = BatchNormalization(momentum=batchmomentum)(cpf,training=K.learning_phase())
-            cpf = Dropout(dropoutRate)(cpf)                                                   
+            cpf = Dropout(dropoutRate)(cpf,training=K.learning_phase())                                                  
             cpf = Convolution1D(8, 1, kernel_initializer='lecun_uniform',  activation='relu')(cpf)
             #if batchnorm:
             #    cpf = BatchNormalization(momentum=batchmomentum)(cpf,training=K.learning_phase())
-            #cpf = Dropout(dropoutRate)(cpf)         
+            #cpf = Dropout(dropoutRate)(cpf,training=K.learning_phase())   
         else:
             cpf = Convolution1D(1,1, kernel_initializer='zeros',trainable=False)(cpf_input)
         
@@ -31,15 +31,15 @@ def block_deepFlavourConvolutions(cpf_input,npf_input,vtx_input,dropoutRate,acti
             npf = Convolution1D(32, 1, kernel_initializer='lecun_uniform',  activation='relu')(npf_input)
             if batchnorm:
                 npf = BatchNormalization(momentum=batchmomentum)(npf,training=K.learning_phase())
-            npf = Dropout(dropoutRate)(npf) 
+            npf = Dropout(dropoutRate)(npf,training=K.learning_phase())
             npf = Convolution1D(16, 1, kernel_initializer='lecun_uniform',  activation='relu')(npf)
             if batchnorm:
                 npf = BatchNormalization(momentum=batchmomentum)(npf,training=K.learning_phase())
-            npf = Dropout(dropoutRate)(npf)
+            npf = Dropout(dropoutRate)(npf,training=K.learning_phase())
             npf = Convolution1D(4, 1, kernel_initializer='lecun_uniform',  activation='relu')(npf)
             #if batchnorm:
             #    npf = BatchNormalization(momentum=batchmomentum)(npf,training=K.learning_phase())
-            #npf = Dropout(dropoutRate)(npf)
+            #npf = Dropout(dropoutRate)(npf,training=K.learning_phase())
         else:
             npf = Convolution1D(1,1, kernel_initializer='zeros',trainable=False)(npf_input)
 
@@ -48,18 +48,18 @@ def block_deepFlavourConvolutions(cpf_input,npf_input,vtx_input,dropoutRate,acti
             vtx = Convolution1D(64, 1, kernel_initializer='lecun_uniform',  activation='relu')(vtx_input)
             if batchnorm:
                 vtx = BatchNormalization(momentum=batchmomentum)(vtx,training=K.learning_phase())
-            vtx = Dropout(dropoutRate)(vtx) 
+            vtx = Dropout(dropoutRate)(vtx,training=K.learning_phase())
             vtx = Convolution1D(32, 1, kernel_initializer='lecun_uniform',  activation='relu')(vtx)
             if batchnorm:
                 vtx = BatchNormalization(momentum=batchmomentum)(vtx,training=K.learning_phase())
-            vtx = Dropout(dropoutRate)(vtx)
+            vtx = Dropout(dropoutRate)(vtx,training=K.learning_phase())
             vtx = Convolution1D(32, 1, kernel_initializer='lecun_uniform',  activation='relu')(vtx)
             if batchnorm:
                 vtx = BatchNormalization(momentum=batchmomentum)(vtx,training=K.learning_phase())
-            vtx = Dropout(dropoutRate)(vtx)
+            vtx = Dropout(dropoutRate)(vtx,training=K.learning_phase())
             vtx = Convolution1D(8, 1, kernel_initializer='lecun_uniform',  activation='relu')(vtx)
             #vtx = BatchNormalization(momentum=batchmomentum)(vtx,training=K.learning_phase())
-            #vtx = Dropout(dropoutRate)(vtx)
+            #vtx = Dropout(dropoutRate)(vtx,training=K.learning_phase())
         else:
             vtx = Convolution1D(1,1, kernel_initializer='zeros',trainable=False)(vtx_input)
     if add_summary:
@@ -75,35 +75,35 @@ def block_deepFlavourDense(x,dropoutRate,active=True,batchnorm=False,batchmoment
             x=  Dense(200, activation='relu',kernel_initializer='lecun_uniform')(x)
             if batchnorm:
                 x = BatchNormalization(momentum=batchmomentum)(x,training=K.learning_phase())
-            x = Dropout(dropoutRate)(x)
+            x = Dropout(dropoutRate)(x,training=K.learning_phase())
             x=  Dense(100, activation='relu',kernel_initializer='lecun_uniform')(x)
             if batchnorm:
                 x = BatchNormalization(momentum=batchmomentum)(x,training=K.learning_phase())
-            x = Dropout(dropoutRate)(x)
+            x = Dropout(dropoutRate)(x,training=K.learning_phase())
             x=  Dense(100, activation='relu',kernel_initializer='lecun_uniform')(x)
             if batchnorm:
                 x = BatchNormalization(momentum=batchmomentum)(x,training=K.learning_phase())
-            x = Dropout(dropoutRate)(x)
+            x = Dropout(dropoutRate)(x,training=K.learning_phase())
             x=  Dense(100, activation='relu',kernel_initializer='lecun_uniform')(x)
             if batchnorm:
                 x = BatchNormalization(momentum=batchmomentum)(x,training=K.learning_phase())
-            x = Dropout(dropoutRate)(x)
+            x = Dropout(dropoutRate)(x,training=K.learning_phase())
             x=  Dense(100, activation='relu',kernel_initializer='lecun_uniform')(x)
             if batchnorm:
                 x = BatchNormalization(momentum=batchmomentum)(x,training=K.learning_phase())
-            x = Dropout(dropoutRate)(x)
+            x = Dropout(dropoutRate)(x,training=K.learning_phase())
             x=  Dense(100, activation='relu',kernel_initializer='lecun_uniform')(x)
             if batchnorm:
                 x = BatchNormalization(momentum=batchmomentum)(x,training=K.learning_phase())
-            x = Dropout(dropoutRate)(x)
+            x = Dropout(dropoutRate)(x,training=K.learning_phase())
             x=  Dense(100, activation='relu',kernel_initializer='lecun_uniform')(x)
             if batchnorm:
                 x = BatchNormalization(momentum=batchmomentum)(x,training=K.learning_phase())
-            x = Dropout(dropoutRate)(x)
+            x = Dropout(dropoutRate)(x,training=K.learning_phase())
             x=  Dense(100, activation='relu',kernel_initializer='lecun_uniform')(x)
             if batchnorm:
                 x = BatchNormalization(momentum=batchmomentum)(x,training=K.learning_phase())
-            x = Dropout(dropoutRate)(x)
+            x = Dropout(dropoutRate)(x,training=K.learning_phase())
         else:
             x= Dense(1,kernel_initializer='zeros',trainable=False)(x,training=K.learning_phase())
         
@@ -153,7 +153,7 @@ def model_deepFlavourReference(Inputs,nclasses,nregclasses,dropoutRate=0.1,momen
                 #recurrent_activation='relu'
             )(cpf)
             cpf=BatchNormalization(momentum=momentum)(cpf,training=K.learning_phase())
-            cpf = Dropout(dropoutRate)(cpf)
+            cpf = Dropout(dropoutRate)(cpf,training=K.learning_phase())
 
             npf = LSTM(50,
                 go_backwards=True,
@@ -164,7 +164,7 @@ def model_deepFlavourReference(Inputs,nclasses,nregclasses,dropoutRate=0.1,momen
                 #recurrent_activation='relu'
             )(npf)
             npf=BatchNormalization(momentum=momentum)(npf,training=K.learning_phase())
-            npf = Dropout(dropoutRate)(npf)
+            npf = Dropout(dropoutRate)(npf,training=K.learning_phase())
 
             vtx = LSTM(50,
                 go_backwards=True,
@@ -175,7 +175,7 @@ def model_deepFlavourReference(Inputs,nclasses,nregclasses,dropoutRate=0.1,momen
                 #recurrent_activation='relu'
             )(vtx)
             vtx=BatchNormalization(momentum=momentum)(vtx,training=K.learning_phase())
-            vtx = Dropout(dropoutRate)(vtx)
+            vtx = Dropout(dropoutRate)(vtx,training=K.learning_phase())
         else:
             cpf = Flatten()(cpf)
             npf = Flatten()(npf)
