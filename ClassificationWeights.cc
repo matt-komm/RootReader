@@ -40,7 +40,7 @@ class ClassificationWeightsOp:
         std::string filePath;
         std::vector<std::string> histNames;
         bool transpose_;
-        std::vector<TH2F> hists;
+        std::vector<std::shared_ptr<TH2F>> hists;
         std::vector<int> varIndex;
         
         static mutex globalMutexForROOT_; //protects ROOT
@@ -73,21 +73,24 @@ class ClassificationWeightsOp:
                 {
                     throw std::runtime_error("Cannot find hist '"+histName+"' in file '"+filePath+"'");
                 }
+                hist = (TH2F*)hist->Clone();
                 hist->SetDirectory(0);
-                hists.emplace_back(*hist);
+                hists.push_back(std::shared_ptr<TH2F>(hist));
             }
         }
         
         
         virtual ~ClassificationWeightsOp()
         { 
+            mutex_lock rootLock(globalMutexForROOT_);
+            hists.clear();
         }
         
         float computeWeight(int classIndex, float value1, float value2)
         {
-            TH2& hist = hists[classIndex];
-            int bin = hist.FindBin(value1,value2);
-            return hist.GetBinContent(bin);
+            TH2* hist = hists[classIndex].get();
+            int bin = hist->FindBin(value1,value2);
+            return hist->GetBinContent(bin);
         }
 
         void Compute(OpKernelContext* context)

@@ -242,14 +242,14 @@ except ImportError:
 fileListTrain = []
 #filePathTrain = "/media/matthias/HDD/matthias/Analysis/LLP/training/samples/rootFiles.raw.txt"
 #filePathTrain = "/vols/cms/mkomm/LLP/samples/rootFiles_stripped2.txt"
-#filePathTrain = "/vols/cms/mkomm/LLP/samples3_split_train_shuffle.txt"
+#filePathTrain = "/vols/cms/mkomm/LLP/samples3_b_train_shuffle.txt"
 
 filePathTrain = "/vols/cms/mkomm/LLP/samples4_train_ttbar.txt"
 #filePathTrain = "/vols/cms/mkomm/LLP/samples4_train_ctau1.txt"
 #filePathTrain = "/vols/cms/mkomm/LLP/samples4_train_ctau10.txt"
 #filePathTrain = "/vols/cms/mkomm/LLP/samples4_train_ctau100.txt"
 
-outputFolder = "test"
+outputFolder = "ttbar_test"
 if os.path.exists(outputFolder):
     print "Warning: output folder '%s' already exists!"%outputFolder
 else:
@@ -267,7 +267,7 @@ for l in f:
 f.close()
 print "files train ",len(fileListTrain)
 
-fileListTrain = fileListTrain[:10]+fileListTrain[-5:]
+fileListTrain = fileListTrain[:5]+fileListTrain[-3:]
 
 #print fileList
 
@@ -294,18 +294,35 @@ featureDict = {
 
     "truth": {
         "branches":[
-            'isB/UInt_t',
-            'isBB/UInt_t',
-            'isGBB/UInt_t',
-            'isLeptonicB/UInt_t',
-            'isLeptonicB_C/UInt_t',
-            'isC/UInt_t',
-            'isCC/UInt_t',
-            'isGCC/UInt_t',
-            'isUD/UInt_t',
-            'isS/UInt_t',
+            'isB||isBB||isGBB||isLeptonicB||isLeptonicB_C/UInt_t',
+            #'isC||isCC||isGCC/UInt_t',
+            #'isUD||isS||isG/UInt_t',
+            
+            #'isB||isBB||isGBB/UInt_t',
+            
+            #'isB/UInt_t',
+            #'isBB/UInt_t',
+            #'isGBB/UInt_t',
+            
+            #'isLeptonicB/UInt_t',
+            #'isLeptonicB_C/UInt_t',
+            
+            'isC||isCC||isGCC/UInt_t',
+            
+            #'isC/UInt_t',
+            #'isCC/UInt_t',
+            #'isGCC/UInt_t',
+            
+            'isUD||isS/UInt_t',
+            #'isUD/UInt_t',
+            #'isS/UInt_t',
+            
+            
             'isG/UInt_t',
+            
             #'isFromLLgno/UInt_t',
+            
+            
             #'isUndefined/UInt_t',
             #'isFromLLgno_isB/UInt_t',
             #'isFromLLgno_isBB/UInt_t',
@@ -518,6 +535,7 @@ for label in branchNameList:
         if weight.GetMaximum()>0:
             print "rescale ",label,1./(weight.GetMaximum())
             weight.Scale(1./weight.GetMaximum()) #ensure no crazy oversampling
+        
         weightsPerClass[label]=weight
         for ibin in range(hist.GetNbinsX()):
             for jbin in range(hist.GetNbinsY()):
@@ -570,20 +588,37 @@ def setupModel(batch,add_summary=False):
     #weights = tf.divide(weights,weights_sum)
 
     nclasses = truth.shape.as_list()[1]
+    print "Nclasses = ",nclasses
     inputs = [globalvars,cpf,npf,vtx]
-    prediction = model_deepFlavourReference(
+    output = model_deepFlavourReference(
         inputs,
         nclasses,
         1,
         dropoutRate=0.1,
         momentum=0.6,
-        batchnorm=True,
+        batchnorm=False,
         lstm=False,
         add_summary=add_summary
     )
-    result["prediction"] = prediction
-    cross_entropy = keras.losses.categorical_crossentropy(truth, prediction)
+    
+    weight = classificationweights_module.classification_weights(
+        batch["truth"],
+        batch['globals'],
+        os.path.join(outputFolder,"weights.root"),
+        branchNameList,
+        [0,1]
+    )
+    
+    prediction =  keras.layers.Activation('softmax')(output)
+    #cross_entropy = keras.losses.categorical_crossentropy(
+    #    truth,
+    #    prediction
+    #)
+    #cross_entropy = tf.multiply(tf.nn.softmax_cross_entropy_with_logits(labels=truth,logits=output),weight)
+    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=truth,logits=output)
     loss = tf.reduce_mean(cross_entropy)
+    result["prediction"] = prediction
+    
 
     accuracy,accuracy_op = tf.metrics.accuracy(tf.argmax(truth,1),tf.argmax(prediction,1))
     result["accuracy"] = accuracy_op
@@ -598,7 +633,7 @@ def setupModel(batch,add_summary=False):
     
 global_step = 0
     
-for epoch in range(0,70):
+for epoch in range(70):
     epoch_duration = time.time()
     print "epoch",epoch+1
     
@@ -607,9 +642,10 @@ for epoch in range(0,70):
 
         rootreader_op = []
         resamplers = []
-        for _ in range(min(len(fileListTrain),6)):
-            reader = root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=100).batch() 
+        for _ in range(min(len(fileListTrain)-1,6)):
+            reader = root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=200).batch() 
             rootreader_op.append(reader)
+            
             weight = classificationweights_module.classification_weights(
                 reader["truth"],
                 reader["globals"],
@@ -622,13 +658,15 @@ for epoch in range(0,70):
                 reader
             ).resample()
             resamplers.append(resampled)
+            
         
         batchSize = 1000
         minAfterDequeue = batchSize*2
         capacity = minAfterDequeue + 3*batchSize
         
         batch = tf.train.shuffle_batch_join(
-            resamplers, 
+            #rootreader_op, 
+            resamplers,
             batch_size=batchSize, 
             capacity=capacity,
             min_after_dequeue=minAfterDequeue,
@@ -695,7 +733,7 @@ for epoch in range(0,70):
     
     sess.run(init_op)
     
-    summary_writer = tf.summary.FileWriter(os.path.join(outputFolder,"log"+str(epoch)), sess.graph)
+    #summary_writer = tf.summary.FileWriter(os.path.join(outputFolder,"log"+str(epoch)), sess.graph)
     
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
@@ -716,18 +754,29 @@ for epoch in range(0,70):
     start_time = time.time()
 
     #double decay
-    learning_rate_val = 0.0005*(0.1**(epoch/5.))+0.0001*(0.1**(epoch/40.))
+    learning_rate_val = 0.001*(0.1**(epoch/3.))+0.0001*(0.1**(epoch/10.))
+    #NSCAN = 200
+    #learning_rates = numpy.zeros(NSCAN)
+    #loss_values = numpy.zeros(NSCAN)
+    
+    predictions_per_class = numpy.zeros((model_test["prediction"].shape.as_list()[1],100,2))
+    
     try:
         step = 0
         while not coord.should_stop():
-            step += 1
-            global_step+=1
+            #if step>=NSCAN:
+            #    break
+            #learning_rate_val = min(10**(-8.+8.*step/(NSCAN-1.)),1)
+            
+
             #loss is calculated before weights are updated
-            model_test["model"].set_weights(model_train["model"].get_weights()) 
-            _,_,loss_train, accuracy_train,test_batch_value = sess.run([
+            train_weights = model_train["model"].get_weights()
+            #print train_weights
+            model_test["model"].set_weights(train_weights) 
+            _,_,loss_train, accuracy_train,prediction_train_val,train_batch_value,test_batch_value = sess.run([
                     train_op, model_train["model"].updates,
                     model_train["loss"],model_train["accuracy"],
-                    test_batch
+                    model_train["prediction"],train_batch,test_batch
                 ], 
                     feed_dict={K.learning_phase(): 1, learning_rate:learning_rate_val}
             )
@@ -735,14 +784,20 @@ for epoch in range(0,70):
             feed_dict = {K.learning_phase(): 0, learning_rate:learning_rate_val}
             for l in placeholder_test.keys():
                 feed_dict[placeholder_test[l]]=test_batch_value[l]
-            summary_val,loss_test, accuracy_test = sess.run([
-                    summary_op,model_test["loss"],model_test["accuracy"]
+            summary_val,loss_test, accuracy_test,prediction_test_val = sess.run([
+                    summary_op,model_test["loss"],model_test["accuracy"],model_test["prediction"]
                 ], 
                     feed_dict=feed_dict
             )
+            
+            #loss_values[step] = loss_test
+            #learning_rates[step]=learning_rate_val
+            step += 1
+            global_step+=1
+            
             #only start reporting after a few initial steps
-            if global_step>10:
-                summary_writer.add_summary(summary_val,global_step)
+            #if global_step>10:
+            #    summary_writer.add_summary(summary_val,global_step)
             
             #account for dynamic batch size
             nTestBatch = len(test_batch_value["num"])
@@ -754,9 +809,16 @@ for epoch in range(0,70):
                 total_loss_test+=loss_test*nTestBatch
                     
                     
+            labelIndices_train = numpy.argmax(train_batch_value["truth"],axis=1)
+            labelIndices_test = numpy.argmax(test_batch_value["truth"],axis=1)
+            for ibatch in range(len(labelIndices_train)):
+                predictions_per_class[labelIndices_train[ibatch]][min(int(prediction_train_val[ibatch][labelIndices_train[ibatch]]*100.),99)][0] += 1
+            for ibatch in range(len(labelIndices_test)):
+                predictions_per_class[labelIndices_test[ibatch]][min(int(prediction_test_val[ibatch][labelIndices_test[ibatch]]*100.),99)][1] += 1
+                    
             if step % 10 == 0:
                 duration = (time.time() - start_time)/10.
-                print 'Step %d/~%d: loss = %.2f (%.2f), accuracy = %.1f%% (%.1f%%), time = %.3f sec' % (step,math.floor(1.*nEntries/batchSize),loss_train,loss_test,accuracy_train*100.,accuracy_test*100.,duration)
+                print 'Step %d/~%d: loss = %.3f (%.3f), accuracy = %.2f%% (%.2f%%), time = %.3f sec' % (step,math.floor(1.*nEntries/batchSize),loss_train,loss_test,accuracy_train*100.,accuracy_test*100.,duration)
                 start_time = time.time()
     except tf.errors.OutOfRangeError:
         print('Done training for %d steps.' % (step))
@@ -765,14 +827,30 @@ for epoch in range(0,70):
     avgLoss_train = total_loss_train/nTrain
     avgLoss_test = total_loss_test/nTest
     print "Training/Testing = %i/%i, Testing rate = %4.1f%%"%(nTrain,nTest,100.*nTest/(nTrain+nTest))
-    print "Average loss = %.2f (%.2f)"%(avgLoss_train,avgLoss_test)
-    print "Learning rate = = %.3e"%(learning_rate_val)
+    print "Average loss = %.4f (%.4f)"%(avgLoss_train,avgLoss_test)
+    print "Learning rate = = %.4e"%(learning_rate_val)
+    
+    for ilabel in range(predictions_per_class.shape[0]):
+        sumEntries=numpy.sum(predictions_per_class[ilabel],axis=0)
+        for ibin in range(predictions_per_class.shape[1]):
+            predictions_per_class[ilabel][ibin][0]/=sumEntries[0]
+            predictions_per_class[ilabel][ibin][1]/=sumEntries[1]
+        numpy.savetxt(
+            os.path.join(outputFolder,"predictions_epoch"+str(epoch)+"_"+branchNameList[ilabel].replace("||","_")+".np"),
+            predictions_per_class[ilabel]
+        )
+
+
     f = open(os.path.join(outputFolder,"model_epoch.stat"),"a")
     f.write(str(epoch)+";"+str(learning_rate_val)+";"+str(avgLoss_train)+";"+str(avgLoss_test)+";"+str(accuracy_train*100.)+";"+str(accuracy_test*100.)+"\n")
     f.close()
     coord.request_stop()
     coord.join(threads)
     K.clear_session()
-    
-    
+    '''
+    f = open(os.path.join(outputFolder,"scan_lr_epoch"+str(epoch)+".dat"),"w")
+    for i in range(len(learning_rates)):
+        f.write("%8.5e;%8.5e\n"%(learning_rates[i],loss_values[i]))
+    f.close()
+    '''
     

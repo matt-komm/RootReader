@@ -138,7 +138,8 @@ class RootReaderOp:
                 
                 virtual void setBranchAddress(TTree* tree)
                 {
-                    formula_.reset(new TTreeFormula(Base::name().c_str(),Base::expr().c_str(),tree));
+                    const long id = std::hash<std::thread::id>()(std::this_thread::get_id());
+                    formula_.reset(new TTreeFormula((Base::name()+std::to_string(id)).c_str(),Base::expr().c_str(),tree));
                     
                     if(not formula_)
                     {
@@ -264,7 +265,7 @@ class RootReaderOp:
         {
             mutex_lock localLock(localMutex_);
            
-            if (not inputFile_)
+            while (not inputFile_)
             {
                 QueueInterface* queue;
                 OP_REQUIRES_OK(context,GetResourceFromContext(context, "queue_handle", &queue));
@@ -285,6 +286,12 @@ class RootReaderOp:
                 if (not tree_)
                 {
                     throw std::runtime_error("Cannot get tree '"+treename_+"' from file '"+fileName+"'");
+                }
+                //skip trees which are smaller than nBatch_
+                if (tree_->GetEntries()<nBatch_)
+                {
+                    inputFile_.reset(nullptr);
+                    continue;
                 }
                 for (auto& tensorFiller: tensorFillers_)
                 {
@@ -322,7 +329,7 @@ class RootReaderOp:
             if (currentEntry_>=nEvents_)
             {
                 mutex_lock globalLock(globalMutexForROOT_);
-                inputFile_->Close();
+                //inputFile_->Close(); //sometimes this yields a segfault from root
                 inputFile_.reset(nullptr);
             }
         }

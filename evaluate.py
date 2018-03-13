@@ -3,6 +3,7 @@ import keras
 from keras import backend as K
 import os
 import time
+import numpy
 import ROOT
 from root_reader import root_reader
 from root_writer import root_writer
@@ -54,7 +55,7 @@ except Exception, e:
 
 print len(fileList)
 
-#fileList = fileList[20:21]
+#fileList = fileList[-2:-1]
 
 #print fileList
 
@@ -82,17 +83,32 @@ featureDict = {
 
     "truth": {
         "branches":[
+            #'isB||isBB||isGBB||isLeptonicB||isLeptonicB_C/UInt_t',
+            #'isC||isCC||isGCC/UInt_t',
+            #'isUD||isS||isG/UInt_t',
+            
+            #'isB||isBB||isGBB/UInt_t',
+            
             'isB/UInt_t',
             'isBB/UInt_t',
             'isGBB/UInt_t',
+            
             'isLeptonicB/UInt_t',
             'isLeptonicB_C/UInt_t',
+            
+            #'isC||isCC||isGCC/UInt_t',
+            
             'isC/UInt_t',
             'isCC/UInt_t',
             'isGCC/UInt_t',
+            
+            #'isUD||isS/UInt_t',
             'isUD/UInt_t',
             'isS/UInt_t',
+            
+            
             'isG/UInt_t',
+            
             #'isFromLLgno/UInt_t',
             #'isUndefined/UInt_t',
             #'isFromLLgno_isB/UInt_t',
@@ -178,7 +194,7 @@ for ifile,fileNameSizePair in enumerate(fileList):
     print ifile+1,"/",len(fileList),": ",fileName, "(",nevents,")"
     fileListQueue = tf.train.string_input_producer([fileName], num_epochs=1, shuffle=False)
 
-    rootreader_op = root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=100).batch()
+    rootreader_op = root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=1000).batch()
     
     globalvars = keras.layers.Input(tensor=rootreader_op['globals'])
     cpf = keras.layers.Input(tensor=rootreader_op['Cpfcan'])
@@ -191,24 +207,25 @@ for ifile,fileNameSizePair in enumerate(fileList):
     nclasses = truth.shape.as_list()[1]
     print nclasses
     inputs = [globalvars,cpf,npf,vtx]
-    prediction = model_deepFlavourReference(
+    output = model_deepFlavourReference(
         inputs,
         nclasses,
         1,
         dropoutRate=0.1,
         momentum=0.6,
         batchnorm=True,
-        lstm=False
+        lstm=True
     )
-
-    loss = tf.reduce_sum(keras.losses.categorical_crossentropy(truth, prediction))
+    prediction =  keras.layers.Activation('softmax')(output)
+    loss = tf.reduce_sum(tf.nn.softmax_cross_entropy_with_logits(labels=truth,logits=output))
     accuracy,accuracy_op = tf.metrics.accuracy(tf.argmax(truth,1),tf.argmax(prediction,1))
     model = keras.Model(inputs=inputs, outputs=prediction)
     eval_labels = []
     for branch in featureDict["truth"]["branches"]:
         s = branch.rsplit("/",1)
-        eval_labels.append("eval_b_"+s[0]+"/"+s[1])
-    rootwriter_op, write_flag = root_writer(prediction,eval_labels,"evaluated",fileName+".b.friend").write()
+        s[0] = s[0].replace("||","_")
+        eval_labels.append("eval_ball_"+s[0]+"/"+s[1])
+    rootwriter_op, write_flag = root_writer(prediction,eval_labels,"evaluated",fileName+".ball.friend").write()
     #init_op = tf.global_variables_initializer() #bug https://github.com/tensorflow/tensorflow/issues/1045
     init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 
@@ -221,32 +238,41 @@ for ifile,fileNameSizePair in enumerate(fileList):
     total_loss = 0
     
     print "loading weights ..."
-    model.load_weights("ttbar_noLSTM/model_epoch69.hdf5") #use after init_op which initializes random weights!!!
+    model.load_weights("ttbar_all/model_epoch60.hdf5") #use after init_op which initializes random weights!!!
+    maxpredictions_per_class = numpy.zeros(prediction.shape.as_list()[1])
     
     try:
         step = 0
         while not coord.should_stop():
-            step += 100
+            step += 1000
             start_time = time.time()
 
-            #TODO: figure out why setting training phase to 0 gives very wrong results (e.g. remove batchnorm layers)
-            
+            #NOTE: It is important to run the model updates since this assigns the weights to the batchnorm layers!!!
+            #batchnorm mean and variance should not update since learning_phase is set to 0
             if step<nevents:
-                num_value,prediction_value,truth_value,loss_value,accuracy_value,_= sess.run(
-                    [num,prediction,truth,loss,accuracy_op,rootwriter_op], 
+                num_value,prediction_value,truth_value,loss_value,accuracy_value,_,_= sess.run(
+                    [num,prediction,truth,loss,accuracy_op,rootwriter_op,model.updates],
                     feed_dict={
                         K.learning_phase(): 0,
                         write_flag: [1]
                     }
                 )
             else:
-                num_value,prediction_value,truth_value,loss_value,accuracy_value,_= sess.run(
-                    [num,prediction,truth,loss,accuracy_op,rootwriter_op], 
+                num_value,prediction_value,truth_value,loss_value,accuracy_value,_,_= sess.run(
+                    [num,prediction,truth,loss,accuracy_op,rootwriter_op,model.updates], 
                     feed_dict={
                         K.learning_phase(): 0,
                         write_flag: [0]
                     }
                 )
+                
+            labelIndices = numpy.argmax(truth_value,axis=1)
+            for ibatch in range(len(labelIndices)):
+                maxpredictions_per_class[labelIndices[ibatch]] = max([
+                    maxpredictions_per_class[labelIndices[ibatch]],
+                    prediction_value[ibatch][labelIndices[ibatch]]
+                ])
+                
              #pass 1 for training, 0 for testing
             #print prediction_value,truth_value
             #data = sess.run(trainingBatch)
@@ -269,3 +295,6 @@ for ifile,fileNameSizePair in enumerate(fileList):
     coord.join(threads)
     K.clear_session()
     
+    for ilabel in range(len(maxpredictions_per_class)):
+        print "%5.1f"%(maxpredictions_per_class[ilabel]*100.),
+    print " -> %5.1f"%(numpy.mean(maxpredictions_per_class)*100.)

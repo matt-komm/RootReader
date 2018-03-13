@@ -262,7 +262,7 @@ nevents = {
 f = open(filePath)
 for l in f:
     fileName = os.path.join(filePath.rsplit('/',1)[0],l.replace("\n","").replace("\r",""))
-    friendFile = fileName+".b.friend"
+    friendFile = fileName+".ball.friend"
     #friendFile = fileName+".llp.friend"
     #print fileName
     #friendFile = fileName.rsplit("/",1)[0]+"/evaluated_llp/"+fileName.rsplit("/",1)[1].rsplit(".",1)[0]+"_predict.root"
@@ -434,14 +434,17 @@ def makeFlag(varList,isEval=False):
     ret = "(0"
     if isEval:
         for var in varList:
-            ret+="+eval_b_"+var
+            ret+="+eval_ball_"+var.replace("||","_")
     else:
         for var in varList:
-            ret+="||("+var+"==1)"
+            ret+="||(("+var+")>0)"
     ret +=")"
     return ret
 
 bFlags = ['isB','isBB','isGBB','isLeptonicB','isLeptonicB_C']
+
+#bFlags = ['isB||isBB||isGBB||isLeptonicB||isLeptonicB_C']
+
 cFlags = ['isC','isCC','isGCC']
 lFlags = ['isUD','isS','isG']
 llpbFlags = ['isFromLLgno_isB','isFromLLgno_isBB','isFromLLgno_isGBB','isFromLLgno_isLeptonicB','isFromLLgno_isLeptonicB_C']
@@ -486,6 +489,7 @@ for probVar in [
         #histLL = makeHistogram(probVar[2],makeFlag(llpFlagsAll)+"*"+selection[2]+"*(jet_pt>30.)*(fabs(jet_eta)<2.4)",numpy.linspace(0,1,num=501))
         #histLL.SetLineColor(llpColor)
         #histLL.SetLineWidth(3)
+        print makeFlag(bFlags,True)
         print makeFlag(bFlags)
         histB = makeHistogram(probVar[2],makeFlag(bFlags)+"*"+selection[2]+"*(jet_pt>30.)*(fabs(jet_eta)<2.4)",numpy.linspace(0,1,num=501))
         histB.SetLineColor(bColor)
@@ -549,7 +553,7 @@ for probVar in [
         axis = ROOT.TH2F("axis"+str(random.random()),";"+probVar[1]+";Normalized events",50,0,1.,50,0.0001,max(map(lambda x: x.GetMaximum(), [histB,histC,histL]))*1.2)
         axis.Draw("AXIS")
 
-        #histL.Draw("HISTSame")
+        histL.Draw("HISTSame")
         histC.Draw("HISTSame")
         histB.Draw("HISTSame")
         #histLL.Draw("HISTSame")
