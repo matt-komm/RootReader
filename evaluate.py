@@ -32,7 +32,7 @@ fileList = []
 
 #filePath = "/vols/cms/mkomm/LLP/samples2_split2/rootFiles_test_llp.txt"
 #filePath = "/vols/cms/mkomm/LLP/samples/rootFiles_stripped2.txt"
-filePath = "/vols/cms/mkomm/LLP/samples4_test.txt"
+filePath = "/vols/cms/mkomm/LLP/samples4_test_ttbar.txt"
 
 f = open(filePath)
 for l in f:
@@ -87,24 +87,25 @@ featureDict = {
             #'isC||isCC||isGCC/UInt_t',
             #'isUD||isS||isG/UInt_t',
             
-            #'isB||isBB||isGBB/UInt_t',
+            'isB||isBB||isGBB/UInt_t',
             
-            'isB/UInt_t',
-            'isBB/UInt_t',
-            'isGBB/UInt_t',
+            #'isB/UInt_t',
+            #'isBB/UInt_t',
+            #'isGBB/UInt_t',
             
-            'isLeptonicB/UInt_t',
-            'isLeptonicB_C/UInt_t',
+            'isLeptonicB||isLeptonicB_C/UInt_t',
+            #'isLeptonicB/UInt_t',
+            #'isLeptonicB_C/UInt_t',
             
-            #'isC||isCC||isGCC/UInt_t',
+            'isC||isCC||isGCC/UInt_t',
             
-            'isC/UInt_t',
-            'isCC/UInt_t',
-            'isGCC/UInt_t',
+            #'isC/UInt_t',
+            #'isCC/UInt_t',
+            #'isGCC/UInt_t',
             
-            #'isUD||isS/UInt_t',
-            'isUD/UInt_t',
-            'isS/UInt_t',
+            'isUD||isS/UInt_t',
+            #'isUD/UInt_t',
+            #'isS/UInt_t',
             
             
             'isG/UInt_t',
@@ -213,8 +214,8 @@ for ifile,fileNameSizePair in enumerate(fileList):
         1,
         dropoutRate=0.1,
         momentum=0.6,
-        batchnorm=True,
-        lstm=True
+        batchnorm=False,
+        lstm=False
     )
     prediction =  keras.layers.Activation('softmax')(output)
     loss = tf.reduce_sum(tf.nn.softmax_cross_entropy_with_logits(labels=truth,logits=output))
@@ -224,8 +225,8 @@ for ifile,fileNameSizePair in enumerate(fileList):
     for branch in featureDict["truth"]["branches"]:
         s = branch.rsplit("/",1)
         s[0] = s[0].replace("||","_")
-        eval_labels.append("eval_ball_"+s[0]+"/"+s[1])
-    rootwriter_op, write_flag = root_writer(prediction,eval_labels,"evaluated",fileName+".ball.friend").write()
+        eval_labels.append("eval_b_nobn_"+s[0]+"/"+s[1])
+    rootwriter_op, write_flag = root_writer(prediction,eval_labels,"evaluated",fileName+".b_nobn.friend").write()
     #init_op = tf.global_variables_initializer() #bug https://github.com/tensorflow/tensorflow/issues/1045
     init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 
@@ -238,7 +239,7 @@ for ifile,fileNameSizePair in enumerate(fileList):
     total_loss = 0
     
     print "loading weights ..."
-    model.load_weights("ttbar_all/model_epoch60.hdf5") #use after init_op which initializes random weights!!!
+    model.load_weights("ttbar_nobn/model_epoch60.hdf5") #use after init_op which initializes random weights!!!
     maxpredictions_per_class = numpy.zeros(prediction.shape.as_list()[1])
     
     try:
@@ -250,16 +251,16 @@ for ifile,fileNameSizePair in enumerate(fileList):
             #NOTE: It is important to run the model updates since this assigns the weights to the batchnorm layers!!!
             #batchnorm mean and variance should not update since learning_phase is set to 0
             if step<nevents:
-                num_value,prediction_value,truth_value,loss_value,accuracy_value,_,_= sess.run(
-                    [num,prediction,truth,loss,accuracy_op,rootwriter_op,model.updates],
+                num_value,prediction_value,truth_value,loss_value,accuracy_value,_= sess.run(
+                    [num,prediction,truth,loss,accuracy_op,rootwriter_op],
                     feed_dict={
                         K.learning_phase(): 0,
                         write_flag: [1]
                     }
                 )
             else:
-                num_value,prediction_value,truth_value,loss_value,accuracy_value,_,_= sess.run(
-                    [num,prediction,truth,loss,accuracy_op,rootwriter_op,model.updates], 
+                num_value,prediction_value,truth_value,loss_value,accuracy_value,_= sess.run(
+                    [num,prediction,truth,loss,accuracy_op,rootwriter_op], 
                     feed_dict={
                         K.learning_phase(): 0,
                         write_flag: [0]

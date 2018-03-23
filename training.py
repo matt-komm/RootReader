@@ -6,6 +6,7 @@ import numpy
 import ROOT
 import time
 import math
+import random
 import sys
 from root_reader import root_reader
 from train_test_splitter import train_test_splitter
@@ -244,12 +245,14 @@ fileListTrain = []
 #filePathTrain = "/vols/cms/mkomm/LLP/samples/rootFiles_stripped2.txt"
 #filePathTrain = "/vols/cms/mkomm/LLP/samples3_b_train_shuffle.txt"
 
-filePathTrain = "/vols/cms/mkomm/LLP/samples4_train_ttbar.txt"
-#filePathTrain = "/vols/cms/mkomm/LLP/samples4_train_ctau1.txt"
+#filePathTrain = "/vols/cms/mkomm/LLP/samples4_train_ttbar.txt"
+#filePathTrain = "/vols/cms/mkomm/LLP/samples4_train_ctau1_red.txt"
 #filePathTrain = "/vols/cms/mkomm/LLP/samples4_train_ctau10.txt"
 #filePathTrain = "/vols/cms/mkomm/LLP/samples4_train_ctau100.txt"
 
-outputFolder = "ttbar_test"
+filePathTrain = "/vols/cms/mkomm/LLP/samples_nanox_train.txt"
+
+outputFolder = "all"
 if os.path.exists(outputFolder):
     print "Warning: output folder '%s' already exists!"%outputFolder
 else:
@@ -267,7 +270,7 @@ for l in f:
 f.close()
 print "files train ",len(fileListTrain)
 
-fileListTrain = fileListTrain[:5]+fileListTrain[-3:]
+#fileListTrain = fileListTrain[:2]
 
 #print fileList
 
@@ -277,7 +280,7 @@ featureDict = {
         "branches":[
             'sv_pt',
             'sv_deltaR',
-            'sv_mass',
+            #'sv_mass',
             'sv_ntracks',
             'sv_chi2',
             'sv_normchi2',
@@ -294,7 +297,7 @@ featureDict = {
 
     "truth": {
         "branches":[
-            'isB||isBB||isGBB||isLeptonicB||isLeptonicB_C/UInt_t',
+            'jetorigin_isB||jetorigin_isBB||jetorigin_isGBB||jetorigin_isLeptonic_B||jetorigin_isLeptonic_C/UInt_t',
             #'isC||isCC||isGCC/UInt_t',
             #'isUD||isS||isG/UInt_t',
             
@@ -304,23 +307,25 @@ featureDict = {
             #'isBB/UInt_t',
             #'isGBB/UInt_t',
             
+            #'isLeptonicB||isLeptonicB_C/UInt_t',
+            
             #'isLeptonicB/UInt_t',
             #'isLeptonicB_C/UInt_t',
             
-            'isC||isCC||isGCC/UInt_t',
+            'jetorigin_isC||jetorigin_isCC||jetorigin_isGCC/UInt_t',
             
             #'isC/UInt_t',
             #'isCC/UInt_t',
             #'isGCC/UInt_t',
             
-            'isUD||isS/UInt_t',
+            'jetorigin_isUD||jetorigin_isS/UInt_t',
             #'isUD/UInt_t',
             #'isS/UInt_t',
             
             
-            'isG/UInt_t',
+            'jetorigin_isG/UInt_t',
             
-            #'isFromLLgno/UInt_t',
+            'jetorigin_fromLLP/UInt_t',
             
             
             #'isUndefined/UInt_t',
@@ -339,30 +344,24 @@ featureDict = {
         ],
     },
     
-    "gen": {
-        "branches":[
-            'genLL_decayLength',
-            'gen_pt_WithNu',
-        ],
-    },
     
     "globals": {
         "branches": [
-            'jet_pt',
-            'jet_eta',
-            'nCpfcand',
-            'nNpfcand',
+            'global_pt',
+            'global_eta',
+            'ncpf',
+            'nnpf',
             'nsv',
-            'npv',
-            'TagVarCSV_trackSumJetEtRatio', 
-            'TagVarCSV_trackSumJetDeltaR', 
-            'TagVarCSV_vertexCategory', 
-            'TagVarCSV_trackSip2dValAboveCharm', 
-            'TagVarCSV_trackSip2dSigAboveCharm', 
-            'TagVarCSV_trackSip3dValAboveCharm', 
-            'TagVarCSV_trackSip3dSigAboveCharm', 
-            'TagVarCSV_jetNSelectedTracks', 
-            'TagVarCSV_jetNTracksEtaRel'
+            #'npv',
+            'csv_trackSumJetEtRatio', 
+            'csv_trackSumJetDeltaR', 
+            'csv_vertexCategory', 
+            'csv_trackSip2dValAboveCharm', 
+            'csv_trackSip2dSigAboveCharm', 
+            'csv_trackSip3dValAboveCharm', 
+            'csv_trackSip3dSigAboveCharm', 
+            'csv_jetNSelectedTracks', 
+            'csv_jetNTracksEtaRel'
         ],
 
     },
@@ -370,34 +369,34 @@ featureDict = {
 
     "Cpfcan": {
         "branches": [
-            'Cpfcan_BtagPf_trackEtaRel',
-            'Cpfcan_BtagPf_trackPtRel',
-            'Cpfcan_BtagPf_trackPPar',
-            'Cpfcan_BtagPf_trackDeltaR',
-            'Cpfcan_BtagPf_trackPParRatio',
-            'Cpfcan_BtagPf_trackSip2dVal',
-            'Cpfcan_BtagPf_trackSip2dSig',
-            'Cpfcan_BtagPf_trackSip3dVal',
-            'Cpfcan_BtagPf_trackSip3dSig',
-            'Cpfcan_BtagPf_trackJetDistVal',
+            'cpf_trackEtaRel',
+            'cpf_trackPtRel',
+            'cpf_trackPPar',
+            'cpf_trackDeltaR',
+            'cpf_trackPParRatio',
+            'cpf_trackSip2dVal',
+            'cpf_trackSip2dSig',
+            'cpf_trackSip3dVal',
+            'cpf_trackSip3dSig',
+            'cpf_trackJetDistVal',
 
-            'Cpfcan_ptrel', 
-            'Cpfcan_drminsv',
-            'Cpfcan_VTX_ass',
-            'Cpfcan_puppiw',
-            'Cpfcan_chi2',
-            'Cpfcan_quality'
+            'cpf_ptrel', 
+            'cpf_drminsv',
+            'cpf_vertex_association',
+            'cpf_puppi_weight',
+            'cpf_track_chi2',
+            'cpf_track_quality'
         ],
         "max":25
     },
     "Npfcan": {
         "branches": [
-            'Npfcan_ptrel',
-            'Npfcan_deltaR',
-            'Npfcan_isGamma',
-            'Npfcan_HadFrac',
-            'Npfcan_drminsv',
-            'Npfcan_puppiw'
+            'npf_ptrel',
+            'npf_deltaR',
+            'npf_isGamma',
+            'npf_hcal_fraction',
+            'npf_drminsv',
+            'npf_puppi_weight'
         ],
         "max":25
     }
@@ -441,8 +440,8 @@ def drawHists(histDict,branchNameList,legend):
     other = 4
     for label in branchNameList:
         hist = histDict[label]
-        legend.AddEntry(hist,label.replace("is",""),"L")
-        if label.find("isFromLLgno")>=0:
+        legend.AddEntry(hist,label.replace("is","").replace("jetorigin","").replace("_",""),"L")
+        if label.find("fromLLP")>=0:
             hist.SetLineColor(ROOT.kOrange+7)
             hist.SetLineWidth(ll/3)
             hist.SetLineStyle(ll%3+1)
@@ -490,14 +489,14 @@ def makePlot(histDict,branchNameList,binning,title,output,taget=None,logx=0,logy
 
 histsPerClass = {}
 weightsPerClass = {}
-chain = ROOT.TChain("deepntuplizer/tree")
+chain = ROOT.TChain("jets")
 for f in fileListTrain:
     chain.AddFile(f)
 nEntries = chain.GetEntries()
 print "total entries",nEntries
 
 
-binningPt = numpy.logspace(1.6,3.,num=30)
+binningPt = numpy.linspace(1.3,3.0,num=30)
 binningEta = numpy.linspace(-2.4,2.4,num=10)
 targetShape = ROOT.TH2F("ptetaTarget","",len(binningPt)-1,binningPt,len(binningEta)-1,binningEta)
 branchNameList = []
@@ -510,9 +509,9 @@ for label in featureDict["truth"]["branches"]:
     hist = ROOT.TH2F("pteta"+branchName,"",len(binningPt)-1,binningPt,len(binningEta)-1,binningEta)
     hist.Sumw2()
     #hist.SetDirectory(0)
-    chain.Project(hist.GetName(),"jet_eta:jet_pt","("+branchName+"==1)")
+    chain.Project(hist.GetName(),"global_eta:global_pt","("+branchName+"==1)")
     
-    if label.find("isFromLLgno")>=0 or label.find("isB")>=0:
+    if label.find("fromLLP")>=0 or label.find("isB")>=0:
         targetShape.Add(hist)
         targetEvents+=hist.GetEntries()
     if hist.Integral()>0:
@@ -559,7 +558,7 @@ weightFile.Close()
 histsPt = {l: h.ProjectionX() for l, h in histsPerClass.items()}
 histsEta = {l: h.ProjectionY() for l, h in histsPerClass.items()}
 
-makePlot(histsPt,branchNameList,binningPt,";Jet pT (GeV);Normalized events","pt",taget=targetShape.ProjectionX(),logx=1)
+makePlot(histsPt,branchNameList,binningPt,";Jet log(pT/1 GeV);Normalized events","pt",taget=targetShape.ProjectionX())
 makePlot(histsEta,branchNameList,binningEta,";Jet #eta;Normalized events","eta",taget=targetShape.ProjectionY())
 
 def divide(n,d):
@@ -569,7 +568,7 @@ def divide(n,d):
 weightsPt = {l: divide(targetShape.ProjectionX(),h.ProjectionX()) for l, h in histsPerClass.items()}
 weightsEta = {l: divide(targetShape.ProjectionY(),h.ProjectionY()) for l, h in histsPerClass.items()}
 
-makePlot(weightsPt,branchNameList,binningPt,";Jet pT (GeV);Weight","weight_pt",logx=1,logy=1)
+makePlot(weightsPt,branchNameList,binningPt,";Jet log(pT/1 GeV);Weight","weight_pt",logy=1)
 makePlot(weightsEta,branchNameList,binningEta,";Jet #eta;Weight","weight_eta",logy=1)
 
 
@@ -581,7 +580,6 @@ def setupModel(batch,add_summary=False):
     npf = keras.layers.Input(tensor=batch['Npfcan'])
     vtx = keras.layers.Input(tensor=batch['sv'])
     truth = batch["truth"]
-    genPt = batch["gen"][:,1]
 
 
     #weights_sum = tf.reduce_mean(weights)
@@ -594,7 +592,7 @@ def setupModel(batch,add_summary=False):
         inputs,
         nclasses,
         1,
-        dropoutRate=0.0,
+        dropoutRate=0.1,
         momentum=0.6,
         batchnorm=False,
         lstm=False,
@@ -615,7 +613,7 @@ def setupModel(batch,add_summary=False):
     #    prediction
     #)
     #cross_entropy = tf.multiply(tf.nn.softmax_cross_entropy_with_logits(labels=truth,logits=output),weight)
-    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=truth,logits=output)
+    cross_entropy = tf.nn.softmax_cross_entropy_with_logits_v2(labels=truth,logits=output)
     loss = tf.reduce_mean(cross_entropy)
     result["prediction"] = prediction
     
@@ -632,10 +630,18 @@ def setupModel(batch,add_summary=False):
     return result
     
 global_step = 0
+
+scanned_learning_rate = -100
+
+isScanning = False
     
-for epoch in range(70):
+epoch = 0
+while (epoch<61):
+    #if epoch%5==0:
+    #    isScanning = not isScanning
+    
     epoch_duration = time.time()
-    print "epoch",epoch+1
+    print "epoch",epoch+1," isScanning =",isScanning
     
     with tf.device('/cpu:0'):
         fileListQueue = tf.train.string_input_producer(fileListTrain, num_epochs=1, shuffle=True)
@@ -643,7 +649,7 @@ for epoch in range(70):
         rootreader_op = []
         resamplers = []
         for _ in range(min(len(fileListTrain)-1,6)):
-            reader = root_reader(fileListQueue, featureDict,"deepntuplizer/tree",batch=200).batch() 
+            reader = root_reader(fileListQueue, featureDict,"jets",batch=200).batch() 
             rootreader_op.append(reader)
             
             weight = classificationweights_module.classification_weights(
@@ -660,7 +666,7 @@ for epoch in range(70):
             resamplers.append(resampled)
             
         
-        batchSize = 1000
+        batchSize = 10000
         minAfterDequeue = batchSize*2
         capacity = minAfterDequeue + 3*batchSize
         
@@ -675,7 +681,7 @@ for epoch in range(70):
         train_test_split = train_test_splitter(
             batch["num"],
             batch,
-            percentage=15
+            percentage=10
         )
         train_batch = train_test_split.train()
         test_batch = train_test_split.test()
@@ -753,26 +759,31 @@ for epoch in range(70):
     nTest = 0
     start_time = time.time()
 
-    #double decay
-    learning_rate_val = 0.001*(0.1**(epoch/3.))+0.0001*(0.1**(epoch/10.))
-    #NSCAN = 200
-    #learning_rates = numpy.zeros(NSCAN)
-    #loss_values = numpy.zeros(NSCAN)
+    NSCAN=700
+    if isScanning:
+        learning_rate_scan = numpy.zeros(NSCAN)
+        loss_scan = numpy.zeros(NSCAN)
     
     predictions_per_class = numpy.zeros((model_test["prediction"].shape.as_list()[1],100,2))
+    
     
     try:
         step = 0
         while not coord.should_stop():
-            #if step>=NSCAN:
-            #    break
-            #learning_rate_val = min(10**(-8.+8.*step/(NSCAN-1.)),1)
-            
+            if isScanning:
+                if step>=NSCAN:
+                    break
+                learning_rate_val = min(10**(-7.+6.7*step/(NSCAN-1.)),1)
+                learning_rate_scan[step]=learning_rate_val
+            else:
+                #learning_rate_val = scanned_learning_rate*(0.1**(epoch/10.))
+                learning_rate_val = 0.001*(0.1**(epoch/5.))+0.0001*(0.1**(epoch/20.))
 
             #loss is calculated before weights are updated
             train_weights = model_train["model"].get_weights()
             #print train_weights
             model_test["model"].set_weights(train_weights) 
+
             _,_,loss_train, accuracy_train,prediction_train_val,train_batch_value,test_batch_value = sess.run([
                     train_op, model_train["model"].updates,
                     model_train["loss"],model_train["accuracy"],
@@ -780,6 +791,7 @@ for epoch in range(70):
                 ], 
                     feed_dict={K.learning_phase(): 1, learning_rate:learning_rate_val}
             )
+
             
             feed_dict = {K.learning_phase(): 0, learning_rate:learning_rate_val}
             for l in placeholder_test.keys():
@@ -789,15 +801,11 @@ for epoch in range(70):
                 ], 
                     feed_dict=feed_dict
             )
+            if isScanning:
+                loss_scan[step]=loss_test
             
-            #loss_values[step] = loss_test
-            #learning_rates[step]=learning_rate_val
             step += 1
             global_step+=1
-            
-            #only start reporting after a few initial steps
-            #if global_step>10:
-            #    summary_writer.add_summary(summary_val,global_step)
             
             #account for dynamic batch size
             nTestBatch = len(test_batch_value["num"])
@@ -822,28 +830,93 @@ for epoch in range(70):
                 start_time = time.time()
     except tf.errors.OutOfRangeError:
         print('Done training for %d steps.' % (step))
-    model_train["model"].save_weights(os.path.join(outputFolder,"model_epoch"+str(epoch)+".hdf5"))
-    print "Epoch duration = (%.1f min)"%((time.time()-epoch_duration)/60.)
-    avgLoss_train = total_loss_train/nTrain
-    avgLoss_test = total_loss_test/nTest
-    print "Training/Testing = %i/%i, Testing rate = %4.1f%%"%(nTrain,nTest,100.*nTest/(nTrain+nTest))
-    print "Average loss = %.4f (%.4f)"%(avgLoss_train,avgLoss_test)
-    print "Learning rate = = %.4e"%(learning_rate_val)
-    
-    for ilabel in range(predictions_per_class.shape[0]):
-        sumEntries=numpy.sum(predictions_per_class[ilabel],axis=0)
-        for ibin in range(predictions_per_class.shape[1]):
-            predictions_per_class[ilabel][ibin][0]/=sumEntries[0]
-            predictions_per_class[ilabel][ibin][1]/=sumEntries[1]
-        numpy.savetxt(
-            os.path.join(outputFolder,"predictions_epoch"+str(epoch)+"_"+branchNameList[ilabel].replace("||","_")+".np"),
-            predictions_per_class[ilabel]
+        
+    if isScanning:
+        
+        loss_scan[0] = loss_scan[1] # this cannot be used since at beginning weights haven't been optimized
+        loss_scan[-1] = loss_scan[-1]*0.5+loss_scan[-2]*0.5
+        for i in range(1,NSCAN-1):
+            loss_scan[i] = loss_scan[i-1]*0.25+loss_scan[i]*0.5+loss_scan[i+1]*0.25
+        
+        loss_error_scan = numpy.zeros(NSCAN)
+        for i in range(1,NSCAN-1):
+            loss_error_scan[i]=numpy.std([loss_scan[i-1],loss_scan[i],loss_scan[i+1]])
+        loss_error_scan[0] = loss_error_scan[1]
+        loss_error_scan[-1] = loss_error_scan[-2]
+        
+        cv = ROOT.TCanvas("cv"+str(epoch)+str(random.random()),"",750,650)
+        cv.SetLogx(1)
+        axis = ROOT.TH2F("axis"+str(epoch)+str(random.random()),";learning rate; loss",
+            50,learning_rate_scan[0],learning_rate_scan[-1],
+            50,numpy.min(loss_scan)*0.8,numpy.mean(loss_scan[0:10])+(numpy.mean(loss_scan[0:10])-0.8*numpy.min(loss_scan))
         )
+        axis.Draw("AXIS")
+        #graph = ROOT.TGraphErrors(NSCAN,learning_rate_scan,loss_scan,numpy.zeros(NSCAN),loss_error_scan)
+        graph = ROOT.TGraph(NSCAN,learning_rate_scan,loss_scan)
+        graph.SetLineColor(ROOT.kAzure-4)
+        graph.SetLineWidth(2)
+        graph.Draw("SameL")
+        
+        
+        minLR = learning_rate_scan[numpy.argmin(loss_scan)]
+        fit_range = learning_rate_scan[numpy.argmin(loss_scan)+10]
+        fct = ROOT.TF1("fct"+str(epoch)+str(random.random()),"[0]-[1]*TMath::Exp(-1./(2*[2]*[2])*TMath::Power(TMath::Log(x)-TMath::Log([3]),2))",learning_rate_scan[10],fit_range)
+        fct.SetParameter(0,numpy.mean(loss_scan[0:10]))
+        fct.SetParameter(1,numpy.mean(loss_scan[0:10]-numpy.min(loss_scan)))
+        fct.SetParameter(2,0.3)
+        fct.SetParameter(3,minLR)
+        fct.SetLineColor(ROOT.kBlack)
+        fct.SetLineWidth(2)
+        graph.Fit(fct,"R")
+        
+        fct.Draw("SameL")
+        
+        #inflection points for exp(-0.5*x**2) are at x=-1/1
+        x_opt = math.exp(math.log(fct.GetParameter(3))-fct.GetParameter(2))
+        marker = ROOT.TMarker(x_opt,fct.Eval(x_opt),20)
+        marker.SetMarkerSize(1.2)
+        marker.Draw("SameP")
+        cv.Print(os.path.join(outputFolder,"lr_scan_epoch"+str(epoch)+".pdf"))
+        
+        rootFile =ROOT.TFile(os.path.join(outputFolder,"lr_scan_epoch"+str(epoch)+".root"),"RECREATE")
+        graph.SetName("graph")
+        graph.Write()
+        fct.SetName("fct")
+        fct.Write()
+        cv.SetName("cv")
+        cv.Write()
+        rootFile.Close()
+        
+        scanned_learning_rate = max([10**-7,x_opt*0.5])
+        print "Set learning rate to %.4e"%(scanned_learning_rate)
+        
+
+    else:
+        model_train["model"].save_weights(os.path.join(outputFolder,"model_epoch"+str(epoch)+".hdf5"))
+        print "Epoch duration = (%.1f min)"%((time.time()-epoch_duration)/60.)
+        avgLoss_train = total_loss_train/nTrain
+        avgLoss_test = total_loss_test/nTest
+        print "Training/Testing = %i/%i, Testing rate = %4.1f%%"%(nTrain,nTest,100.*nTest/(nTrain+nTest))
+        print "Average loss = %.4f (%.4f)"%(avgLoss_train,avgLoss_test)
+        print "Learning rate = = %.4e"%(learning_rate_val)
+        
+        for ilabel in range(predictions_per_class.shape[0]):
+            sumEntries=numpy.sum(predictions_per_class[ilabel],axis=0)
+            for ibin in range(predictions_per_class.shape[1]):
+                predictions_per_class[ilabel][ibin][0]/=sumEntries[0]
+                predictions_per_class[ilabel][ibin][1]/=sumEntries[1]
+            numpy.savetxt(
+                os.path.join(outputFolder,"predictions_epoch"+str(epoch)+"_"+branchNameList[ilabel].replace("||","_")+".np"),
+                predictions_per_class[ilabel]
+            )
 
 
-    f = open(os.path.join(outputFolder,"model_epoch.stat"),"a")
-    f.write(str(epoch)+";"+str(learning_rate_val)+";"+str(avgLoss_train)+";"+str(avgLoss_test)+";"+str(accuracy_train*100.)+";"+str(accuracy_test*100.)+"\n")
-    f.close()
+        f = open(os.path.join(outputFolder,"model_epoch.stat"),"a")
+        f.write(str(epoch)+";"+str(learning_rate_val)+";"+str(avgLoss_train)+";"+str(avgLoss_test)+";"+str(accuracy_train*100.)+";"+str(accuracy_test*100.)+"\n")
+        f.close()
+        
+        epoch+=1
+        
     coord.request_stop()
     coord.join(threads)
     K.clear_session()

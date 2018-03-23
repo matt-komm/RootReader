@@ -221,7 +221,7 @@ fileList = []
 #filePath = "/vols/cms/mkomm/LLP/samples2_split2/rootFiles_test_ttbar.txt"
 #filePath = "/vols/cms/mkomm/LLP/rootFiles_ttbar.txt"
 #filePath = "/vols/cms/mkomm/LLP/rootFiles_llp.txt"
-filePath = "/vols/cms/mkomm/LLP/samples4_test.txt"
+filePath = "/vols/cms/mkomm/LLP/samples4_test_ttbar.txt"
 
 xsecs = {
     "QCD_Pt_30to50_TuneCUETP8M1_13TeV_pythia8":140932000,
@@ -262,7 +262,7 @@ nevents = {
 f = open(filePath)
 for l in f:
     fileName = os.path.join(filePath.rsplit('/',1)[0],l.replace("\n","").replace("\r",""))
-    friendFile = fileName+".ball.friend"
+    friendFile = fileName+".b_nobn.friend"
     #friendFile = fileName+".llp.friend"
     #print fileName
     #friendFile = fileName.rsplit("/",1)[0]+"/evaluated_llp/"+fileName.rsplit("/",1)[1].rsplit(".",1)[0]+"_predict.root"
@@ -434,16 +434,16 @@ def makeFlag(varList,isEval=False):
     ret = "(0"
     if isEval:
         for var in varList:
-            ret+="+eval_ball_"+var.replace("||","_")
+            ret+="+eval_b_nobn_"+var.replace("||","_")
     else:
         for var in varList:
             ret+="||(("+var+")>0)"
     ret +=")"
     return ret
 
-bFlags = ['isB','isBB','isGBB','isLeptonicB','isLeptonicB_C']
+#bFlags = ['isB','isBB','isGBB','isLeptonicB','isLeptonicB_C']
 
-#bFlags = ['isB||isBB||isGBB||isLeptonicB||isLeptonicB_C']
+bFlags = ['isB||isBB||isGBB','isLeptonicB||isLeptonicB_C']
 
 cFlags = ['isC','isCC','isGCC']
 lFlags = ['isUD','isS','isG']

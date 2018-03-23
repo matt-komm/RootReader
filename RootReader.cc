@@ -287,12 +287,6 @@ class RootReaderOp:
                 {
                     throw std::runtime_error("Cannot get tree '"+treename_+"' from file '"+fileName+"'");
                 }
-                //skip trees which are smaller than nBatch_
-                if (tree_->GetEntries()<nBatch_)
-                {
-                    inputFile_.reset(nullptr);
-                    continue;
-                }
                 for (auto& tensorFiller: tensorFillers_)
                 {
                     tensorFiller->setBranchAddress(tree_);
