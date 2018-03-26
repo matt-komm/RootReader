@@ -3,8 +3,8 @@ import json
 import pickle
 
 class Model(object):
-    def __init__(self):
-        self._isTraining = tf.placeholder('bool')
+    def __init__(self,isTraining):
+        self._isTraining = tf.constant(isTraining)
         self._layers = []
         
     def isTraining(self):
@@ -142,8 +142,8 @@ def dense(model,x,units,activation=tf.nn.relu,dropout=0.1,name=None):
 
 
 
-def makeModel(noutputs,cpf,npf,sv,event):
-    model = Model()
+def makeModel(noutputs,cpf,npf,sv,event,isTraining):
+    model = Model(isTraining=isTraining)
     
     cpf = conv1d(model,cpf,64)
     cpf = conv1d(model,cpf,32)

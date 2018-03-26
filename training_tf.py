@@ -254,7 +254,7 @@ fileListTrain = []
 #filePathTrain = "/vols/cms/mkomm/LLP/samples_nanox_train.txt"
 filePathTrain = "/media/matthias/HDD/matthias/Analysis/LLP/training/samples_nanox_train.txt"
 
-outputFolder = "all_fast"
+outputFolder = "all_v13"
 if os.path.exists(outputFolder):
     print "Warning: output folder '%s' already exists!"%outputFolder
 else:
@@ -586,7 +586,7 @@ makePlot(weightsEta,branchNameList,binningEta,";Jet #eta;Weight","weight_eta",lo
 
 
 
-def setupModel(batch,add_summary=False):
+def setupModel(batch,isTraining,add_summary=False):
     result = {}
     
     truth = batch["truth"]
@@ -596,7 +596,8 @@ def setupModel(batch,add_summary=False):
         batch["cpf"],
         batch["npf"],
         batch["sv"],
-        batch["globals"]
+        batch["globals"],
+        isTraining=isTraining
     )
     result["model"] = model
     
@@ -642,7 +643,7 @@ scanned_learning_rate = -100
 isScanning = False
 
 #learning_rate_val = 0.0005
-learning_rate_val = 0.01
+learning_rate_val = 0.001
 previous_losses = [1000,1000,1000]
 epoch = 0
 while (epoch<61):
@@ -695,7 +696,7 @@ while (epoch<61):
         train_batch = train_test_split.train()
         test_batch = train_test_split.test()
 
-    model_train = setupModel(train_batch)
+    model_train = setupModel(train_batch,isTraining=True)
     print "Model parameters: ",model_train["model"].count_params()
     #print model_train["model"].getVariables()
     
@@ -709,7 +710,7 @@ while (epoch<61):
             )
     
     #TODO: try to reuse variables
-    model_test = setupModel(placeholder_test)
+    model_test = setupModel(placeholder_test,isTraining=False)
     assign_varsToTest = model_test["model"].assignVariablesFromModel(model_train["model"])
 
     #model.add_loss(loss)
@@ -808,12 +809,12 @@ while (epoch<61):
                     model_train["loss"],model_train["accuracy"],
                     model_train["prediction"],train_batch,test_batch,
                 ], 
-                    feed_dict={learning_rate:learning_rate_val, model_train["model"].isTraining():True}
+                    feed_dict={learning_rate:learning_rate_val}
             )
             
             
             
-            feed_dict = {learning_rate:learning_rate_val,model_test["model"].isTraining():False}
+            feed_dict = {learning_rate:learning_rate_val}
             for l in placeholder_test.keys():
                 feed_dict[placeholder_test[l]]=test_batch_value[l]
                 

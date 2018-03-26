@@ -143,9 +143,15 @@ with tf.Session(graph=tf.Graph()) as sess:
     sv = tf.placeholder('float32',shape=(None,featureDict["sv"]["max"],len(featureDict["sv"]["branches"])),name="sv")
     event = tf.placeholder('float32',shape=(None,len(featureDict["globals"]["branches"])),name="globals")
 
+    print "cpf shape: ",cpf.shape.as_list()
+    print "npf shape: ",npf.shape.as_list()
+    print "sv shape: ",sv.shape.as_list()
+    print "globals shape: ",event.shape.as_list()
+
     output,model = makeModel(
         len(featureDict["truth"]["branches"]),
-        cpf,npf,sv,event
+        cpf,npf,sv,event,
+        isTraining=False
     )
     prediction = tf.nn.softmax(output,name="prediction")
 
@@ -158,7 +164,7 @@ with tf.Session(graph=tf.Graph()) as sess:
         sess.graph.as_graph_def(),
         ["prediction"]
     )
-    tf.train.write_graph(const_graph,"all","model_epoch28.pbtxt")
+    tf.train.write_graph(const_graph,"all","model_epoch28.pb",as_text=False)
     
 
 
