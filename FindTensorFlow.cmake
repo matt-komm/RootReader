@@ -58,7 +58,7 @@ if (TF_VER_MINOR GREATER 3)
                 PATHS ${TF_LIB}
                 NO_DEFAULT_PATH
         )
-    endif (${TF_INC_OK} EQUAL 0 AND ${TF_LIB_OK} EQUAL 0)
+    endif (${TF_LIB_OK} EQUAL 0)
     find_package_handle_standard_args(TensorFlow DEFAULT_MSG TensorFlow_INCLUDE_DIR TensorFlow_LIBRARY)
     
 else (TF_VER_MINOR GREATER 3)
