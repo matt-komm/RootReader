@@ -62,6 +62,12 @@ add_library(Resampler
 target_link_libraries(Resampler ${TensorFlow_LIBRARY})
 
 
+add_executable(evalGraph
+    evalGraph.cc
+)
+target_link_libraries(evalGraph ${TensorFlow_LIBRARY} ${ROOT_LIBRARIES} -lTreePlayer)
+
+
 add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0 -std=c++11)
 
 copy_file_if_changed(
