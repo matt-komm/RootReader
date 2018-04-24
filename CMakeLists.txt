@@ -22,6 +22,15 @@ add_library(RootReader
 )
 target_link_libraries(RootReader ${TensorFlow_LIBRARY} ${ROOT_LIBRARIES} -lTreePlayer)
 
+
+#include_directories(${TensorFlow_INCLUDE_DIRS} ${ROOT_INCLUDE_DIR})
+#add_library(RootDataset
+#    MODULE
+#    RootDataset.cc
+#)
+#target_link_libraries(RootDataset ${TensorFlow_LIBRARY} ${ROOT_LIBRARIES} -lTreePlayer)
+
+
 add_library(RootWriter
     MODULE
     RootWriter.cc
@@ -33,6 +42,12 @@ add_library(ClassificationWeights
     ClassificationWeights.cc
 )
 target_link_libraries(ClassificationWeights ${TensorFlow_LIBRARY} ${ROOT_LIBRARIES})
+
+add_library(FakeBackground
+    MODULE
+    FakeBackground.cc
+)
+target_link_libraries(FakeBackground ${TensorFlow_LIBRARY} ${ROOT_LIBRARIES})
 
 add_library(TrainTestSplitting
     MODULE

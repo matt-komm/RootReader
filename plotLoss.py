@@ -9,11 +9,9 @@ cvscale = 1.0
 
 fontScale = 750./650.
 
-ROOT.gROOT.Reset()
 ROOT.gROOT.SetBatch(True)
 ROOT.gStyle.SetOptStat(0)
 ROOT.gStyle.SetOptFit(0)
-ROOT.gROOT.Reset()
 ROOT.gROOT.SetStyle("Plain")
 ROOT.gStyle.SetOptStat(0)
 ROOT.gStyle.SetOptFit(1111)
@@ -203,14 +201,14 @@ def loadFile(path):
     loss_test = []
     i = 0
     for l in f:
-        l=l.split(" ")
+        l=l.split(";")
         epoch.append(i+1.)
         i+=1
         
         #epoch.append(float(l[0]))
-        loss_train.append(float(l[0]))
-        loss_test.append(float(l[1]))
-        if i>17:
+        loss_train.append(float(l[2]))
+        loss_test.append(float(l[3]))
+        if i>36:
             break
     epoch = numpy.array(epoch)
     loss_train = numpy.array(loss_train)
@@ -237,11 +235,11 @@ def drawLoss(training,color,legend,title):
 #training_alt = loadFile("model_alt_epoch.stat")
 #training_alt2 = loadFile("model_alt2_epoch.stat")
 
-training = loadFile("losses.log")
+training = loadFile("model_epoch.stat")
 
 cv = ROOT.TCanvas("cv","",900,700)
 #cv.SetLogy(1)
-axis = ROOT.TH2F("axis",";Epoch;Loss",50,0,20,50,0.5,2.5)
+axis = ROOT.TH2F("axis",";Epoch;Loss",50,1,36,50,1.,1.2)
 axis.Draw("AXIS")
 cv.SetRightMargin(0.35)
 legend = ROOT.TLegend(0.66,1-cv.GetTopMargin(),0.99,1-cv.GetTopMargin()-2*0.06)

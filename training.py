@@ -280,7 +280,7 @@ featureDict = {
         "branches":[
             'sv_pt',
             'sv_deltaR',
-            #'sv_mass',
+            'sv_mass',
             'sv_ntracks',
             'sv_chi2',
             'sv_normchi2',
@@ -344,7 +344,6 @@ featureDict = {
         ],
     },
     
-    
     "globals": {
         "branches": [
             'global_pt',
@@ -352,7 +351,6 @@ featureDict = {
             'ncpf',
             'nnpf',
             'nsv',
-            #'npv',
             'csv_trackSumJetEtRatio', 
             'csv_trackSumJetDeltaR', 
             'csv_vertexCategory', 
@@ -389,6 +387,7 @@ featureDict = {
         ],
         "max":25
     },
+    
     "Npfcan": {
         "branches": [
             'npf_ptrel',
